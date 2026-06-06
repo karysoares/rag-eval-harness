@@ -1,0 +1,65 @@
+{
+  "schema_version": "1.0",
+  "run_id": "run_ci_fixture",
+  "criado_em_utc": "2026-05-17T10:57:16.031948+00:00",
+  "metadados_corrida": {
+    "timestamp_utc": "2026-05-17T10:57:16.008914+00:00",
+    "run_id": "run_ci_fixture",
+    "git_commit": "8fed765",
+    "config_hash_sha256": "3510316b36bef19bf71dfd849f959fe4c3bdcdb90db66566395096154ade8df4",
+    "config_path": "configs/smoke_amostra.yaml",
+    "dataset_id": "fairytale_ptbr_smoke",
+    "dataset": {
+      "name": "fairytale_ptbr_smoke",
+      "subset": "default",
+      "split": "validation",
+      "reference_type": "lexical",
+      "hf_repo": null,
+      "limit": 2,
+      "mode": "amostra_local"
+    },
+    "modelos": {
+      "llm_geracao": "gpt-4o-mini",
+      "llm_juiz": "gpt-4o-mini",
+      "embeddings": "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2",
+      "embeddings_backend": "sentence_transformers"
+    },
+    "prompt_hashes_sha256": {
+      "responder_system.txt": "d6b6953593258b18ec4c182a61740fac0b2732df1a3eb58f8e723f53dd507280",
+      "responder_user_template.txt": "f204b28fe6f163a0a3bc492188ae91867883c555014668eca2aeb45b974a5e0e",
+      "judge_rag_pt_system.txt": "4399b5735fb3ce7d6402dd616a74ca1cd2edfadcc0c8a90bd3b1ce47622c197a",
+      "judge_rag_pt_user_template.txt": "eb5f36a6989eee5a1d02359e611e48f7a4eb31ef6972311442fe25faff1b9aa9"
+    },
+    "n_registos": 1,
+    "seed": 42,
+    "orquestracao": "unico",
+    "perfil_baseline": "hibrido"
+  },
+  "dependencias_specs": [
+    "001",
+    "002",
+    "003",
+    "004",
+    "005",
+    "007"
+  ],
+  "ficheiros": [
+    {
+      "nome": "predictions.jsonl",
+      "tamanho_bytes": 394,
+      "sha256": "0575b00a0897c9bdcee39f7f429a3bbbd236203ab2f1987cd68bf875158b3c15",
+      "n_linhas": 1,
+      "schema_version": "1.0"
+    },
+    {
+      "nome": "summary.json",
+      "tamanho_bytes": 7038,
+      "sha256": "c83c2966b1977715fa359b24092c7a51484d7fe067d0322f6892d153fe2632c8",
+      "schema_version": "1.0"
+    }
+  ],
+  "integridade": {
+    "checksum_por_linha_jsonl": null,
+    "nota": "SHA256 por ficheiro completo. Checksum por linha em JSONL é roadmap (Fase 1 documenta apenas hash do ficheiro final)."
+  }
+}

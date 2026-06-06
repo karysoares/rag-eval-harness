@@ -1,0 +1,22 @@
+{
+  "schema_version": "1.0",
+  "n_itens": 5,
+  "protocolo_ativo": {
+    "verify_gold": false,
+    "verify_embedding": true,
+    "verify_judge": true,
+    "aggregation_policy": "embedding_e_juiz",
+    "embedding_min_cosine": 0.28,
+    "negative_judge_verdicts": [
+      "nao_sustentado",
+      "contradicacao",
+      "incompleto",
+      "inseguro"
+    ],
+    "judge_aggregation_verdicts": [
+      "nao_sustentado",
+      "contradicacao",
+      "inseguro"
+    ]
+  }
+}

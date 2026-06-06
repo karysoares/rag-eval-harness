@@ -1,0 +1,23 @@
+cff-version: 1.2.0
+title: rag-eval-harness
+message: "If you use this software, please cite it as below."
+type: software
+authors:
+  - given-names: Karina
+    family-names: Soares dos Santos
+    email: karinasoares@tuta.io
+version: 1.0.0
+date-released: 2026-06-06
+license: MIT
+repository-code: "https://github.com/karysoares/rag-eval-harness"
+url: "https://github.com/karysoares/rag-eval-harness"
+keywords:
+  - rag
+  - evaluation
+  - llm
+  - question-answering
+  - fairytaleqa
+abstract: >-
+  Harness reprodutível para avaliar pipelines RAG + LLM — recuperação, geração,
+  grounding, juiz e padrões determinísticos, com dashboard offline e artefactos
+  auditáveis. Foco de referência em FairytaleQA pt-BR.

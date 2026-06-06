@@ -1,0 +1,51 @@
+.venv/
+__pycache__/
+*.py[cod]
+*.egg-info/
+build/
+dist/
+rag_eval_harness-*/
+.coverage
+.coverage.*
+coverage.xml
+htmlcov/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+*.pfx
+credentials*.json
+secrets.*
+*.sqlite
+*.sqlite3
+*.db
+outputs/
+run_comparison.json
+# JSONL de corridas locais (fixtures CI em tests/fixtures/ são versionados)
+*.jsonl
+!tests/fixtures/**/*.jsonl
+*.log
+.DS_Store
+.huggingface/
+.cache/
+
+# Prompts legados na raiz (fonte canónica: src/llm_evaluation/prompts/)
+/prompts/
+
+# Documentação e notas internas (não publicar)
+docs/
+
+notebooks/
+# Cursor IDE (local only)
+.cursor/
+.idea/
+
+# Changelog, lockfile e GitHub Actions locais (não publicar)
+CHANGELOG.md
+uv.lock
+.github/

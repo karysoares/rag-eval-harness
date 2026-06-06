@@ -1,0 +1,94 @@
+# Experimento B (tratamento): gate juiz 0.30 + reparo anti-recusa em contexto forte.
+# Requer JUDGE_MODEL distinto de LLM_MODEL no .env.
+seed: 42
+orchestration: unico
+output_dir: outputs
+
+dataset:
+  name: fairytale_ptbr
+  subset: default
+  split: validation
+  reference_type: lexical
+  hf_repo: benjleite/FairytaleQA-translated-ptBR
+  hf_subset: null
+  question_column: question
+  answer_column: answer
+  context_column: story_section
+  incorrect_column: null
+  id_column: null
+  limit: 0
+  mode: hub
+  shuffle: false
+
+rag:
+  enabled: true
+  top_k: 4
+  inject_retrieval_failure: false
+  chunk_max_chars: 500
+  min_score_recuperacao: 0.25
+
+embeddings:
+  backend: sentence_transformers
+  model_name: sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2
+
+verification:
+  verify_gold: false
+  verify_embedding: true
+  verify_judge: true
+  embedding_min_cosine: 0.24
+  embedding_use_gold_chunk: true
+  judge_prompt_style: rag_pt
+  judge_return_chain_of_thought: false
+  judge_max_context_chars: 12000
+  judge_max_parse_retries: 2
+  judge_gate_embedding_max_cosine: null
+  judge_gate_requires_strong_context: false
+  judge_incompleto_contexto_forte_negativo: true
+  judge_incompleto_contexto_forte_min_score: 0.5
+  negative_judge_verdicts:
+    - nao_sustentado
+    - contradicacao
+    - inseguro
+    - incompleto
+  judge_aggregation_verdicts:
+    - nao_sustentado
+    - contradicacao
+    - inseguro
+
+generation:
+  temperature: 0.1
+  max_tokens: 128
+  estilo_prompt: rag_pt
+  omitir_llm_se_recuperacao_fraca: true
+  reparar_recusa_generica: true
+  min_score_recuperacao_reparo_recusa: 0.5
+  max_tentativas_reparo_recusa: 2
+
+llm:
+  timeout_seconds: 120
+
+aggregation:
+  policy: embedding_e_juiz
+
+operacional:
+  fila_min_score_recuperacao: 0.5
+  gap_min_score_recuperacao: 0.5
+  gap_max_f1_token: 0.15
+
+baselines:
+  profile: hibrido
+
+metricas_lexicas:
+  habilitado: true
+  f1_token: true
+  bleu: true
+  rouge_l: true
+  meteor: true
+  levenshtein: true
+  modo_referencia: max_rouge_l
+
+patterns:
+  referencia_forte:
+    f1_min: 0.65
+  referencia_fraca:
+    f1_min: 0.25

@@ -1,0 +1,214 @@
+{
+  "schema_version": "1.0",
+  "tipo_referencia_ativo": "answer_lists",
+  "kpi_primario": "confusao_vs_referencia",
+  "kpi_diagnostico_primario": "confusao_vs_referencia",
+  "protocolo_ativo": {
+    "verify_gold": false,
+    "verify_embedding": false,
+    "verify_judge": false,
+    "aggregation_policy": "embedding_e_juiz",
+    "embedding_min_cosine": 0.28,
+    "negative_judge_verdicts": ["nao_sustentado", "contradicacao", "inseguro"],
+    "judge_aggregation_verdicts": ["nao_sustentado", "contradicacao", "inseguro"]
+  },
+  "detector_activo": {
+    "politica_agregacao": "embedding_e_juiz",
+    "camadas_verificacao": [],
+    "embedding_min_cosine": 0.28,
+    "negative_judge_verdicts": ["nao_sustentado", "contradicacao", "inseguro"],
+    "judge_aggregation_verdicts": ["nao_sustentado", "contradicacao", "inseguro"],
+    "nota": "flag_anomalia reflecte a política de alerta activa, não a qualidade global do chatbot."
+  },
+  "taxa_alerta": 0.0,
+  "n_itens": 1,
+  "n_com_gold_para_confusao": 1,
+  "n_sem_rotulo_gold": 0,
+  "n_anomalias_marcadas": 0,
+  "n_gold_incorretos": 0,
+  "n_gold_corretos": 1,
+  "revocacao_marcacao_no_gold_incorreto": null,
+  "ic95_revocacao_marcacao_no_gold_incorreto": null,
+  "taxa_falso_alarme_no_gold_correto": 0.0,
+  "ic95_taxa_falso_alarme_no_gold_correto": [
+    0.0,
+    0.7934567085261071
+  ],
+  "confusao_vs_referencia": {
+    "vp_referencia_incorreta_marcado": 0,
+    "fn_referencia_incorreta_nao_marcado": 0,
+    "fp_referencia_correta_mas_marcado": 0,
+    "vn_referencia_correta_nao_marcado": 1
+  },
+  "confusao_vs_gold": {
+    "vp_gold_incorreto_marcado": 0,
+    "fn_gold_incorreto_nao_marcado": 0,
+    "fp_gold_correto_mas_marcado": 0,
+    "vn_gold_correto_nao_marcado": 1
+  },
+  "estratificacao_fp_gold_correto": {
+    "n_fp_gold_correto": 0,
+    "nota": "FP = gold automático correto e anomalia (em geral embedding e/ou juiz, não o sinal ouro)."
+  },
+  "qualidade_pipeline": {
+    "n_geracoes_curadas_recuperacao_fraca": 0,
+    "taxa_geracao_curada": 0.0
+  },
+  "precisao_anomalia_vs_gold_incorreto": null,
+  "ic95_precisao_anomalia_vs_gold_incorreto": null,
+  "revocacao_anomalia_vs_gold_incorreto": null,
+  "ic95_revocacao_anomalia_vs_gold_incorreto": null,
+  "acuracia_balanceada_gold": 0.5,
+  "cohen_kappa_anomalia_vs_gold": null,
+  "analise_camadas": {
+    "versao_esquema": "2",
+    "tipo_referencia": "answer_lists",
+    "n_itens": 1,
+    "n_rotulados_referencia": 1,
+    "n_referencia_incorreta": 0,
+    "n_rotulados_truthfulqa": 1,
+    "n_truthfulqa_incorretos": 0,
+    "rotulo_camada_referencia": "sinal_listas_incorretas",
+    "gatilhos_marginais": {
+      "n_sinal_ouro_incorreto": 0,
+      "n_referencia_lexica_fraca": null,
+      "n_embedding_baixo_suporte": 0,
+      "n_juiz_negativo": 0
+    },
+    "combinacoes_exclusivas_todos_itens": {
+      "ouro_apenas": 0,
+      "so_embedding": 0,
+      "so_juiz": 0,
+      "ouro_e_embedding": 0,
+      "ouro_e_juiz": 0,
+      "embedding_e_juiz": 0,
+      "tres_sinais": 0,
+      "nenhum_sinal": 1
+    },
+    "combinacoes_exclusivas_so_anomalias": {
+      "ouro_apenas": 0,
+      "so_embedding": 0,
+      "so_juiz": 0,
+      "ouro_e_embedding": 0,
+      "ouro_e_juiz": 0,
+      "embedding_e_juiz": 0,
+      "tres_sinais": 0,
+      "nenhum_sinal": 0
+    },
+    "por_camada_vs_referencia": {
+      "sinal_ouro": {
+        "camada": "sinal_ouro_incorreto",
+        "descricao": "Referência positiva = resposta não alinha com listas correct/incorrect do dataset. Camada positiva = gatilho dessa camada.",
+        "vp": 0,
+        "fn": 0,
+        "fp": 0,
+        "vn": 1,
+        "precisao": null,
+        "ic95_precisao": null,
+        "revocacao": null,
+        "ic95_revocacao": null,
+        "acuracia_balanceada": 0.5,
+        "cohen_kappa_vs_gold": null
+      },
+      "sinal_embedding": {
+        "camada": "embedding_baixo_suporte",
+        "descricao": "Referência positiva = resposta não alinha com listas correct/incorrect do dataset. Camada positiva = gatilho dessa camada.",
+        "vp": 0,
+        "fn": 0,
+        "fp": 0,
+        "vn": 1,
+        "precisao": null,
+        "ic95_precisao": null,
+        "revocacao": null,
+        "ic95_revocacao": null,
+        "acuracia_balanceada": 0.5,
+        "cohen_kappa_vs_gold": null
+      },
+      "sinal_juiz": {
+        "camada": "juiz_negativo",
+        "descricao": "Referência positiva = resposta não alinha com listas correct/incorrect do dataset. Camada positiva = gatilho dessa camada.",
+        "vp": 0,
+        "fn": 0,
+        "fp": 0,
+        "vn": 1,
+        "precisao": null,
+        "ic95_precisao": null,
+        "revocacao": null,
+        "ic95_revocacao": null,
+        "acuracia_balanceada": 0.5,
+        "cohen_kappa_vs_gold": null
+      }
+    },
+    "por_camada_vs_gold_truthfulqa": {
+      "sinal_ouro": {
+        "camada": "sinal_ouro_incorreto",
+        "descricao": "Referência positiva = resposta não alinha com listas correct/incorrect do dataset. Camada positiva = gatilho dessa camada.",
+        "vp": 0,
+        "fn": 0,
+        "fp": 0,
+        "vn": 1,
+        "precisao": null,
+        "ic95_precisao": null,
+        "revocacao": null,
+        "ic95_revocacao": null,
+        "acuracia_balanceada": 0.5,
+        "cohen_kappa_vs_gold": null
+      },
+      "sinal_embedding": {
+        "camada": "embedding_baixo_suporte",
+        "descricao": "Referência positiva = resposta não alinha com listas correct/incorrect do dataset. Camada positiva = gatilho dessa camada.",
+        "vp": 0,
+        "fn": 0,
+        "fp": 0,
+        "vn": 1,
+        "precisao": null,
+        "ic95_precisao": null,
+        "revocacao": null,
+        "ic95_revocacao": null,
+        "acuracia_balanceada": 0.5,
+        "cohen_kappa_vs_gold": null
+      },
+      "sinal_juiz": {
+        "camada": "juiz_negativo",
+        "descricao": "Referência positiva = resposta não alinha com listas correct/incorrect do dataset. Camada positiva = gatilho dessa camada.",
+        "vp": 0,
+        "fn": 0,
+        "fp": 0,
+        "vn": 1,
+        "precisao": null,
+        "ic95_precisao": null,
+        "revocacao": null,
+        "ic95_revocacao": null,
+        "acuracia_balanceada": 0.5,
+        "cohen_kappa_vs_gold": null
+      }
+    },
+    "concordancia_entre_camadas": [
+      {
+        "par": "sinal_ouro__vs__embedding",
+        "vp": 0,
+        "fn": 0,
+        "fp": 0,
+        "vn": 1,
+        "cohen_kappa": null
+      },
+      {
+        "par": "sinal_ouro__vs__juiz",
+        "vp": 0,
+        "fn": 0,
+        "fp": 0,
+        "vn": 1,
+        "cohen_kappa": null
+      },
+      {
+        "par": "embedding__vs__juiz",
+        "vp": 0,
+        "fn": 0,
+        "fp": 0,
+        "vn": 1,
+        "cohen_kappa": null
+      }
+    ],
+    "nota_referencia": "Referência positiva = item com gold automático incorreto (protocolo depende do adaptador: substring em answer_lists, ou ausência de match em lexical). Embedding e juiz medem ancoragem ao contexto RAG, não necessariamente esse rótulo. Cohen's kappa > 0.6 = concordância substancial."
+  }
+}

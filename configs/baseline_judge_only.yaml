@@ -1,0 +1,51 @@
+# Baseline: só camada de juiz (amostra local pt-BR).
+seed: 42
+orchestration: unico
+output_dir: outputs
+
+dataset:
+  name: fairytale_ptbr
+  subset: default
+  split: validation
+  reference_type: none
+  hf_repo: null
+  limit: 2
+  mode: amostra_local
+
+rag:
+  enabled: true
+  top_k: 4
+  inject_retrieval_failure: false
+  chunk_max_chars: 500
+
+embeddings:
+  backend: hash
+  model_name: hash
+
+verification:
+  verify_gold: false
+  verify_embedding: false
+  verify_judge: true
+  embedding_min_cosine: 0.35
+  judge_prompt_style: rag_pt
+  negative_judge_verdicts:
+    - nao_sustentado
+    - contradicacao
+    - inseguro
+
+generation:
+  temperature: 0.2
+  max_tokens: 256
+  estilo_prompt: rag_pt
+
+llm:
+  timeout_seconds: 60
+
+aggregation:
+  policy: qualquer_critico
+
+baselines:
+  profile: so_juiz
+
+metricas_lexicas:
+  habilitado: false
