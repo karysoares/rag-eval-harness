@@ -1,7 +1,7 @@
 """Agregação de métricas por camada de verificação e comparação entre corridas.
 
 Para ``reference_type=lexical``, a referência de confusão/kappa usa F1 token (SPEC-007),
-não substring TruthfulQA em ``gold_correct``. Embedding e juiz medem ancoragem RAG.
+não substring em listas ``correct``/``incorrect``. Embedding e juiz medem ancoragem RAG.
 """
 
 from __future__ import annotations
@@ -733,8 +733,53 @@ def replay_anomaly_flags(
     ]
 
 
-def _fp_rate_on_gold_correct(flags: list[bool], records: list[RunRecord]) -> float | None:
-    idx = [i for i, r in enumerate(records) if r.gold_correct is True]
+def referencia_aceitavel(
+    record: RunRecord,
+    reference_type: str | None,
+    *,
+    f1_fraca_min: float | None = None,
+) -> bool | None:
+    """True = referência aceitável (equivalente a gold-correto para replay de políticas)."""
+    if reference_type == "none":
+        return None
+    if reference_type == "lexical":
+        ref = referencia_incorreta(record, reference_type, f1_fraca_min=f1_fraca_min)
+        if ref is None:
+            return None
+        return ref is False
+    if record.gold_correct is None:
+        return None
+    return record.gold_correct is True
+
+
+def referencia_problematica(
+    record: RunRecord,
+    reference_type: str | None,
+    *,
+    f1_fraca_min: float | None = None,
+) -> bool | None:
+    """True = referência fraca/incorreta (equivalente a gold-incorreto)."""
+    if reference_type == "none":
+        return None
+    if reference_type == "lexical":
+        return referencia_incorreta(record, reference_type, f1_fraca_min=f1_fraca_min)
+    if record.gold_correct is None:
+        return None
+    return record.gold_correct is False
+
+
+def _fp_rate_on_reference_acceptable(
+    flags: list[bool],
+    records: list[RunRecord],
+    reference_type: str | None,
+    *,
+    f1_fraca_min: float | None = None,
+) -> float | None:
+    idx = [
+        i
+        for i, r in enumerate(records)
+        if referencia_aceitavel(r, reference_type, f1_fraca_min=f1_fraca_min) is True
+    ]
     if not idx:
         return None
     fp = sum(1 for i in idx if flags[i])
@@ -750,10 +795,24 @@ def compare_aggregation_policies(
     negative_judge_verdicts: list[str],
     judge_aggregation_verdicts: list[str] | None = None,
     policies: tuple[str, ...] = ("qualquer_critico", "embedding_e_juiz"),
+    reference_type: str | None = "answer_lists",
+    f1_fraca_min: float | None = None,
 ) -> dict[str, object]:
-    """Compara taxas de alerta e FP em gold-correto entre políticas (offline)."""
-    labeled = [r for r in records if r.gold_correct is not None]
-    n_gc = sum(1 for r in labeled if r.gold_correct is True)
+    """Compara taxas de alerta e FP em referência aceitável entre políticas (offline).
+
+    Para ``reference_type=lexical``, usa overlap léxico (``referencia_incorreta``),
+    não ``gold_correto`` booleano (sempre null em datasets léxicos).
+    """
+    labeled = [
+        r
+        for r in records
+        if referencia_problematica(r, reference_type, f1_fraca_min=f1_fraca_min) is not None
+    ]
+    n_acceptable = sum(
+        1
+        for r in labeled
+        if referencia_aceitavel(r, reference_type, f1_fraca_min=f1_fraca_min) is True
+    )
     out_policies: dict[str, object] = {}
     for pol in policies:
         flags = replay_anomaly_flags(
@@ -766,16 +825,29 @@ def compare_aggregation_policies(
             policy=pol,
         )
         n_flag = sum(flags)
-        tp = sum(1 for r, f in zip(records, flags, strict=True) if r.gold_correct is False and f)
-        fp = sum(1 for r, f in zip(records, flags, strict=True) if r.gold_correct is True and f)
-        fn = sum(
-            1 for r, f in zip(records, flags, strict=True) if r.gold_correct is False and not f
+        tp = sum(
+            1
+            for r, f in zip(records, flags, strict=True)
+            if referencia_problematica(r, reference_type, f1_fraca_min=f1_fraca_min) is True and f
         )
-        kappa = cohen_kappa(tp, fn, fp, n_gc - fp) if labeled else None
+        fp = sum(
+            1
+            for r, f in zip(records, flags, strict=True)
+            if referencia_aceitavel(r, reference_type, f1_fraca_min=f1_fraca_min) is True and f
+        )
+        fn = sum(
+            1
+            for r, f in zip(records, flags, strict=True)
+            if referencia_problematica(r, reference_type, f1_fraca_min=f1_fraca_min) is True
+            and not f
+        )
+        kappa = cohen_kappa(tp, fn, fp, n_acceptable - fp) if labeled else None
         out_policies[pol] = {
             "n_anomalias": n_flag,
             "taxa_alerta": (n_flag / len(records)) if records else None,
-            "taxa_falso_alarme_no_gold_correto": _fp_rate_on_gold_correct(flags, records),
+            "taxa_falso_alarme_no_gold_correto": _fp_rate_on_reference_acceptable(
+                flags, records, reference_type, f1_fraca_min=f1_fraca_min
+            ),
             "cohen_kappa_anomalia_vs_gold": kappa,
         }
     or_pol = out_policies.get("qualquer_critico")
@@ -791,10 +863,20 @@ def compare_aggregation_policies(
     reducao: float | None = None
     if baseline_fp is not None and mit_fp is not None and baseline_fp > 0:
         reducao = (baseline_fp - mit_fp) / baseline_fp
+    rotulo = (
+        "overlap_lexico_aceitavel"
+        if reference_type == "lexical"
+        else "gold_correct booleano"
+        if reference_type == "answer_lists"
+        else "sem_referencia"
+    )
     return {
         "versao_esquema": "1",
+        "tipo_referencia": reference_type,
+        "rotulo_referencia_aceitavel": rotulo,
         "n_itens": len(records),
-        "n_gold_corretos": n_gc,
+        "n_referencia_aceitavel": n_acceptable,
+        "n_gold_corretos": n_acceptable,
         "politicas": out_policies,
         "reducao_fp_relativa_embedding_e_juiz_vs_or": reducao,
     }

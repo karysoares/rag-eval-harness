@@ -1,0 +1,110 @@
+# FairytaleQA pt-BR — perfil OPTIMIZADO (qualidade lexical + grounding RAG).
+#
+# Uso (corrida de referência):
+#   uv run llm-eval --config configs/ptbr_fairytale_tuned.yaml
+#   uv run llm-eval --config configs/ptbr_fairytale_tuned.yaml --resume outputs/run_<id>
+#
+# Pré-requisitos (.env — ver .env.example):
+#   LLM_MODEL=gpt-4o          # gerador mais capaz que mini em narrativa/paráfrase
+#   JUDGE_MODEL=gpt-4o        # juiz DISTINTO do gerador (evita auto-referência)
+#   Para menor custo: LLM_MODEL=gpt-4o-mini + JUDGE_MODEL=gpt-4o (como ptbr_fairytale_full)
+#
+# Pós-corrida (offline, sem API):
+#   uv run python scripts/validate_embedding_policy.py outputs/run_<id>
+#   uv run llm-eval --compare-runs outputs/run_a outputs/run_b   # → run_comparison.json
+#
+# Calibração embedding_min_cosine: ajuste com validate_embedding_policy.py (--embedding-min-cosine 0.26–0.28)
+# alvo FP gold-correto < 15% com política embedding_e_juiz (ver docs/metrics.md).
+
+seed: 42
+orchestration: unico
+output_dir: outputs
+
+dataset:
+  name: fairytale_ptbr
+  subset: default
+  split: validation
+  reference_type: lexical
+  hf_repo: benjleite/FairytaleQA-translated-ptBR
+  hf_subset: null
+  question_column: question
+  answer_column: answer
+  context_column: story_section
+  incorrect_column: null
+  id_column: null
+  limit: 0
+  mode: hub
+  shuffle: false
+
+rag:
+  enabled: true
+  top_k: 5  # +1 vs 4: melhor recall de trechos narrativos longos (story_section)
+  inject_retrieval_failure: false
+  chunk_max_chars: 650  # chunks um pouco maiores reduzem cortes mid-frase em contos
+  min_score_recuperacao: 0.22  # ligeiramente abaixo de 0.25 para não descartar contexto útil borderline
+
+embeddings:
+  backend: sentence_transformers
+  model_name: sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2
+
+verification:
+  verify_gold: false
+  verify_embedding: true
+  verify_judge: true
+  embedding_min_cosine: 0.26  # +0.02 vs 0.24: menos FP de grounding; recalibrar offline se FP subir
+  embedding_use_gold_chunk: true
+  judge_prompt_style: rag_pt  # prompts pt + metadados de recuperação no juiz
+  judge_return_chain_of_thought: false
+  judge_max_context_chars: 12000
+  judge_max_parse_retries: 2
+  judge_gate_embedding_max_cosine: null  # juiz em todos os itens (qualidade máxima; ver ptbr_fairytale_cost para gate)
+  judge_gate_requires_strong_context: false
+  judge_incompleto_contexto_forte_negativo: true  # recusa com RAG forte → incompleto (diagnóstico)
+  judge_incompleto_contexto_forte_min_score: 0.5
+  negative_judge_verdicts:
+    - nao_sustentado
+    - contradicacao
+    - inseguro
+    - incompleto
+  judge_aggregation_verdicts:
+    - nao_sustentado
+    - contradicacao
+    - inseguro
+
+generation:
+  temperature: 0  # reprodutibilidade; narrativa não beneficia de amostragem estocástica
+  max_tokens: 256  # respostas narrativas precisam de mais espaço que 128
+  estilo_prompt: rag_pt
+  omitir_llm_se_recuperacao_fraca: true
+  reparar_recusa_generica: true  # segunda tentativa quando RAG forte mas LLM recusa
+  min_score_recuperacao_reparo_recusa: 0.5
+  max_tentativas_reparo_recusa: 2
+
+llm:
+  timeout_seconds: 120
+
+aggregation:
+  policy: embedding_e_juiz
+
+operacional:
+  fila_min_score_recuperacao: 0.5
+  gap_min_score_recuperacao: 0.5
+  gap_max_f1_token: 0.15
+
+baselines:
+  profile: hibrido
+
+metricas_lexicas:
+  habilitado: true
+  f1_token: true
+  bleu: true
+  rouge_l: true
+  meteor: true
+  levenshtein: true
+  modo_referencia: max_rouge_l
+
+patterns:
+  referencia_forte:
+    f1_min: 0.65
+  referencia_fraca:
+    f1_min: 0.25

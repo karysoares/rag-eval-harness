@@ -66,8 +66,6 @@
     "n_itens": 1,
     "n_rotulados_referencia": 1,
     "n_referencia_incorreta": 0,
-    "n_rotulados_truthfulqa": 1,
-    "n_truthfulqa_incorretos": 0,
     "rotulo_camada_referencia": "sinal_listas_incorretas",
     "gatilhos_marginais": {
       "n_sinal_ouro_incorreto": 0,
@@ -96,50 +94,6 @@
       "nenhum_sinal": 0
     },
     "por_camada_vs_referencia": {
-      "sinal_ouro": {
-        "camada": "sinal_ouro_incorreto",
-        "descricao": "Referência positiva = resposta não alinha com listas correct/incorrect do dataset. Camada positiva = gatilho dessa camada.",
-        "vp": 0,
-        "fn": 0,
-        "fp": 0,
-        "vn": 1,
-        "precisao": null,
-        "ic95_precisao": null,
-        "revocacao": null,
-        "ic95_revocacao": null,
-        "acuracia_balanceada": 0.5,
-        "cohen_kappa_vs_gold": null
-      },
-      "sinal_embedding": {
-        "camada": "embedding_baixo_suporte",
-        "descricao": "Referência positiva = resposta não alinha com listas correct/incorrect do dataset. Camada positiva = gatilho dessa camada.",
-        "vp": 0,
-        "fn": 0,
-        "fp": 0,
-        "vn": 1,
-        "precisao": null,
-        "ic95_precisao": null,
-        "revocacao": null,
-        "ic95_revocacao": null,
-        "acuracia_balanceada": 0.5,
-        "cohen_kappa_vs_gold": null
-      },
-      "sinal_juiz": {
-        "camada": "juiz_negativo",
-        "descricao": "Referência positiva = resposta não alinha com listas correct/incorrect do dataset. Camada positiva = gatilho dessa camada.",
-        "vp": 0,
-        "fn": 0,
-        "fp": 0,
-        "vn": 1,
-        "precisao": null,
-        "ic95_precisao": null,
-        "revocacao": null,
-        "ic95_revocacao": null,
-        "acuracia_balanceada": 0.5,
-        "cohen_kappa_vs_gold": null
-      }
-    },
-    "por_camada_vs_gold_truthfulqa": {
       "sinal_ouro": {
         "camada": "sinal_ouro_incorreto",
         "descricao": "Referência positiva = resposta não alinha com listas correct/incorrect do dataset. Camada positiva = gatilho dessa camada.",

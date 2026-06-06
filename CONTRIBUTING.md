@@ -8,7 +8,7 @@ Obrigado pelo interesse em contribuir. Este repositório é um harness de avalia
 2. Revise o fluxo no README ([Arquitetura da pipeline](README.md#arquitetura-da-pipeline)) e o código em `src/llm_evaluation/`.
 3. Novo dataset → adaptador em `src/llm_evaluation/adapters/` + config YAML de exemplo em `configs/`.
 
-Documentação interna (premissas, specs, checklist de release) fica na pasta local `docs/` (gitignored; não versionada no GitHub).
+Documentação técnica em [`docs/`](docs/) (premissas, specs, checklist de release). Ver [`docs/CONTRIBUTING.md`](docs/CONTRIBUTING.md) para o fluxo interno.
 
 ## Ambiente local
 

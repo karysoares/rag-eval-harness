@@ -31,7 +31,7 @@ Métricas de **recuperação** são **diagnósticas** (qualidade do contexto ant
 
 **Por omissão:** [`configs/default.yaml`](configs/default.yaml) — 32 itens, RAG, `orchestration: unico`, prompts e juiz em português.
 
-Documentação de arquitectura, premissas e specs é mantida **localmente** na pasta `docs/` (não versionada no repositório público).
+Documentação técnica (premissas, arquitectura, specs) está em [`docs/`](docs/) — versionada no repositório. Notas pessoais e relatórios internos ficam gitignored (ver `.gitignore`).
 
 ### Matriz KPI (três planos — não misturar)
 
@@ -43,76 +43,61 @@ Documentação de arquitectura, premissas e specs é mantida **localmente** na p
 
 Comandos: `llm-eval --apply-hitl CSV --resume RUN_DIR` · `scripts/publish_run_evidence.py` (agregados publicáveis podem ser gerados localmente).
 
-### Resultados de referência — **Plano A (léxico — diagnóstico)**
+### Evidência e comparativos
 
-Estes números medem **proximidade textual** à resposta de referência do corpus (`reference_type: lexical`). **Não** são o KPI principal de qualidade RAG (Plano B: `sumario_operacional`, juiz, embedding) nem de alerta operacional (Plano C: HITL). Definições resumidas nas secções [Matriz KPI](#matriz-kpi-três-planos--não-misturar) e [Qualidade](#qualidade) abaixo.
+Corpus activo: **FairytaleQA-translated-ptBR** (hub, N=1025) e **fairytale_ptbr** (amostra local, smoke/CI). Métricas vêm de `outputs/run_*/summary.json` (local) ou do snapshot [`assets/benchmarks/comparatives.json`](assets/benchmarks/comparatives.json).
 
-Agregados de corridas locais em `outputs/run_*/summary.json` (29 corridas com sumário; `outputs/` não versionado). Datasets encontrados nos manifests/configs: **FairytaleQA-translated-ptBR** (`mode: hub`), **fairytale_ptbr** (`mode: amostra_local`, smoke/CI), **TruthfulQA** (`mode: demo`, corrida legada sem manifest). Colunas **Plano A** (METEOR, ROUGE-L, BLEU) vêm de `sumario_lexical`; recuperação de `sumario_recuperacao.taxa_chunk_ouro_no_top_k`; juiz = `1 − n_juiz_diagnostico_negativo / n_itens` em `analise_camadas`; anomalia = `taxa_alerta` da política YAML activa.
+**Referência actual (tuned, N=1025):** METEOR **0,901** · ROUGE-L **0,349** · juiz sustentado **78%** · `taxa_alerta` **0%** · recuperação **100%** (`configs/ptbr_fairytale_tuned.yaml`).
 
-| Dataset | N | Config / corrida | METEOR | ROUGE-L (F) | BLEU | Recuperação (% ouro top-k) | Juiz (% sustentado) | Taxa anomalia |
-|---------|---|------------------|--------|-------------|------|----------------------------|---------------------|---------------|
-| FairytaleQA-translated-ptBR (hub) | 1025 | `ptbr_fairytale_full` — baseline (`run_20260517T190713Z`) | 0,783 | 0,380 | 0,206 | 100% | 79,6% | 0% |
-| FairytaleQA-translated-ptBR (hub) | 1025 | `ptbr_fairytale_full` — calibrado (`run_20260517T215023Z`) | 0,823 | 0,366 | 0,193 | 100% | 95,4% | 1,5% |
-| FairytaleQA-translated-ptBR (hub) | 1025 | `ptbr_fairytale_full` — pós-calibração (`run_20260518T074031Z`) | 0,826 | 0,367 | 0,191 | 100% | 91,5% | 0,7% |
-| FairytaleQA-translated-ptBR (hub) | 32 | `default.yaml` — dev (`run_20260517T102836Z`) | 0,679 | 0,422 | 0,221 | 100% | 87,5% | 9,4% |
-| fairytale_ptbr (amostra_local) | 50 | amostra dev, sem manifest (`run_20260517T084621Z`) | 0,720 | 0,618 | 0,495 | 100% | 84,0% | 16% |
-| fairytale_ptbr (amostra_local) | 2 | `smoke_amostra.yaml` / baselines CI (`run_20260516T124205Z`) | — | — | — | 100% | 100% | — |
-| TruthfulQA (demo, legado) | 2 | config removido (`run_20260516T190703Z`) | — | — | — | 100% | 100% | — |
-| FairytaleQA-translated-ptBR (hub) | 1025 | `ptbr_fairytale_tuned.yaml` (`run_20260606T121845Z`) | 0,901 | 0,349 | 0,175 | 100% | 78,0% | 0% |
+| Quando queres… | Eixo | Planos KPI |
+|----------------|------|------------|
+| Ver evolução baseline → tuned no mesmo corpus | **Interno** | A + B |
+| Cruzar juiz/embedding com RAGAS | **Externo** | B |
+| Provar que `embedding_e_juiz` reduz FP | **P0** | B |
+| Calibrar com revisor humano | **HITL** | C |
 
-Modelos típicos nas corridas com manifest: `LLM_MODEL=gpt-4o-mini`, `JUDGE_MODEL=gpt-4o` ou `gpt-4o-mini` (ver aviso no log se iguais). Política de agregação nas corridas FairytaleQA completas: `embedding_e_juiz`. Par baseline/calibrado também em `run_comparison.json` (não versionado).
+Regenerar snapshot: `uv run python scripts/export_comparatives.py` · com RAGAS: `--ragas --ragas-n 25`
 
-**Por que BLEU ≈ 0,2 é esperado (FairytaleQA hub):** respostas narrativas em paráfrase raramente coincidem n-gramas com a referência curta do dataset. **METEOR** e **ROUGE-L** são mais informativos aqui; o juiz RAG (`judge_prompt_style: rag_pt`) mede grounding, não overlap léxico. Em `amostra_local` com N pequeno, BLEU mais alto reflecte amostra e tamanho, não comparabilidade directa com N=1025.
+**Notas de leitura:** Plano A (léxico) ≠ Plano B (alertas/juiz). BLEU ~0,2 é normal em narrativa paráfrase — preferir METEOR. `% sustentado` baixo com `taxa_alerta` 0% pode reflectir vereditos `incompleto` (diagnóstico, não alerta). Corridas dev (N=32) e smoke (N=2) servem CI — **não** comparar com N=1025.
 
-#### Como interpretar
+#### Eixo 1 — Evolução interna (N=1025, `embedding_e_juiz`)
 
-- **Plano A (léxico):** tendência de cobertura semântica face à referência do adaptador — útil para regressão de geração, **não** para declarar “RAG excelente” isoladamente.
-- **Recuperação (`sumario_recuperacao`):** `taxa_chunk_ouro_no_top_k` e `media_score_melhor_chunk` diagnosticam se o contexto certo chega ao LLM **antes** da resposta.
-- **Juiz (`sumario_juiz`, vereditos por item):** `% sustentado` alto + `% negativos` baixo indica respostas ancoradas; `% incompleto` alto com RAG forte sugere recusas ou respostas vagas — ver fila HITL.
-- **Operacional:** `taxa_alerta` / `n_anomalias_marcadas` reflectem só a política YAML activa (`embedding_e_juiz`); zero alertas **não** implica qualidade perfeita.
+Mesmo adaptador e split `validation`; variam YAML, calibração de embedding e parâmetros RAG/geração.
 
-#### Comparativos e interpretação
+| Corrida | Config | METEOR | ROUGE-L | Juiz (% sust.) | Anomalias |
+|---------|--------|--------|---------|----------------|-----------|
+| baseline | `ptbr_fairytale_full` | 0,783 | 0,380 | 79,6% | 0% |
+| calibrado | `ptbr_fairytale_full` | 0,823 | 0,366 | 95,4% | 1,5% |
+| pós-calibração | `ptbr_fairytale_full` | 0,826 | 0,367 | 91,5% | 0,7% |
+| **tuned** | **`ptbr_fairytale_tuned`** | **0,901** | 0,349 | 78,0% | **0%** |
 
-##### 1. Corridas internas (mesmo harness, FairytaleQA pt-BR N=1025)
+Tuned maximiza METEOR e zera alertas operacionais; juiz “baixo” vs calibrado reflecte mais `incompleto` com RAG forte, não queda isolada de qualidade. Ajustes: `max_tokens: 256`, `reparar_recusa_generica`, `top_k: 5`, `chunk_max_chars: 650`, `embedding_min_cosine: 0.26`. Deltas: `uv run llm-eval --compare-runs outputs/run_<a> outputs/run_<b>`.
 
-Quatro corridas completas sobre o split `validation` com o mesmo adaptador e política `embedding_e_juiz`; variam config YAML, calibração de embedding e parâmetros de geração/RAG.
+#### Eixo 2 — Harness vs RAGAS (N=25, mesma amostra)
 
-| Corrida | Config | METEOR | ROUGE-L (F) | BLEU | Juiz (% sustentado) | Taxa anomalia |
-|---------|--------|--------|-------------|------|---------------------|---------------|
-| baseline (`run_20260517T190713Z`) | `ptbr_fairytale_full` | 0,783 | 0,380 | 0,206 | 79,6% | 0% |
-| calibrado (`run_20260517T215023Z`) | `ptbr_fairytale_full` | 0,823 | 0,366 | 0,193 | 95,4% | 1,5% |
-| pós-calibração (`run_20260518T074031Z`) | `ptbr_fairytale_full` | 0,826 | 0,367 | 0,191 | 91,5% | 0,7% |
-| **tuned (`run_20260606T121845Z`)** | **`ptbr_fairytale_tuned`** | **0,901** | 0,349 | 0,175 | 78,0% | **0%** |
+Diagnóstico cruzado — **não** ground truth.
 
-A corrida **tuned** (`configs/ptbr_fairytale_tuned.yaml`) concentra o melhor **METEOR** (+7,4 pp vs pós-calibração) e **0% de anomalias** operacionais, ao custo de ROUGE-L e BLEU ligeiramente mais baixos. Os ajustes principais são: `max_tokens: 256` (respostas narrativas mais completas), `reparar_recusa_generica` + `judge_incompleto_contexto_forte_negativo` (anti-refusal quando o RAG é forte), `top_k: 5` e `chunk_max_chars: 650` (menos cortes mid-frase), e `embedding_min_cosine: 0.26`.
+| Sinal | Harness | RAGAS |
+|-------|---------|-------|
+| Grounding | 72% juiz `sustentado` | faithfulness 0,82 |
+| Relevância | F1 token 0,45 | answer_relevancy 0,94 |
 
-**Trade-offs (não confundir sinais):**
+Detalhes: [`docs/benchmarks/ragas_comparison.md`](docs/benchmarks/ragas_comparison.md).
 
-- **METEOR ↑, ROUGE-L/BLEU ↓:** respostas mais paráfraseadas e semanticamente próximas do gold, com menos overlap de n-gramas — comportamento esperado em QA narrativo; METEOR captura sinonímia melhor que ROUGE-L.
-- **Juiz sustentado ↓ (91,5% → 78,0%):** não indica queda de qualidade isolada. A config tuned marca mais vereditos **`incompleto`** (~21% dos itens) quando há RAG forte mas resposta vaga ou recusa parcial — diagnóstico, não alerta operacional (`incompleto` entra em `negative_judge_verdicts`, mas **não** em `judge_aggregation_verdicts`).
-- **Anomalias 0% vs 0,7%:** com `embedding_e_juiz`, alertas exigem embedding baixo **e** juiz “duro”. A corrida tuned elimina os 7 alertas da pós-calibração; a fila HITL ficou com **11 itens** (1,1%) para revisão humana, não confundir com `taxa_alerta`.
-- **Aviso juiz = gerador:** na corrida tuned, `LLM_MODEL` e `JUDGE_MODEL` podem ser ambos `gpt-4o` — o manifest regista aviso de auto-referência. Para comparação mais estrita, use `LLM_MODEL=gpt-4o-mini` + `JUDGE_MODEL=gpt-4o` (como em `ptbr_fairytale_full`).
+#### Eixo 3 — Calibração P0
 
-**Deltas entre corridas (N=1025):** baseline → calibrado ganha +3,9 pp METEOR e +15,8 pp juiz sustentado, com anomalias a subir para 1,5%. Pós-calibração estabiliza léxico e reduz anomalias (0,7%). Tuned maximiza METEOR (+7,4 pp vs pós-calibração, +11,8 pp vs baseline) e zera alertas operacionais, com ROUGE-L −1,8 pp vs baseline — leitura conjunta Plano A + B, não uma coluna isolada.
+| Caso | FP `qualquer_critico` | FP `embedding_e_juiz` | P0 |
+|------|------------------------|------------------------|-----|
+| Fixture CI (`answer_lists`) | 100% | **0%** | passou |
+| FairytaleQA tuned (`lexical`) | 3,0% | **0%** | passou |
 
-Reproduzir deltas entre duas corridas: `uv run llm-eval --compare-runs outputs/run_<a> outputs/run_<b>` → `run_comparison.json` (diferenças em `sumario_lexical`, `sumario_operacional`, `analise_camadas`).
+Validação: `uv run python scripts/validate_embedding_policy.py outputs/run_<id>` · [`docs/calibracao_embedding.md`](docs/calibracao_embedding.md).
 
-##### 2. Como ler os comparativos (entre as nossas corridas)
+#### Eixo 4 — HITL (6 itens adjudicados)
 
-Compare sempre **o mesmo N e adaptador** (ex.: FairytaleQA hub N=1025). Cruzar Planos A e B — não ranquear por ROUGE-L ou juiz isolados.
+Detector: 0 FP/FN vs humano. Juiz de agregação: 6 FP (humano marcou tudo `correto`). Fixture: [`tests/fixtures/hitl_fairytale_sample/`](tests/fixtures/hitl_fairytale_sample/) — calibração, não extrapolação ao corpus.
 
-| Plano | O que mede | Como usar entre corridas |
-|-------|------------|--------------------------|
-| **A — léxico** (`sumario_lexical`) | Overlap / paráfrase vs gold do corpus | Regressão de geração; em narrativa, METEOR > ROUGE-L. Ex.: tuned (0,901) > pós-calibração (0,826) com ROUGE-L mais baixo — paráfrase semântica, não cópia léxica. |
-| **B — operacional** (`sumario_operacional`, juiz, embedding) | Grounding e alertas YAML | KPI de risco RAG. Calibrado (95,4% juiz) vs tuned (78,0%): ver `% incompleto` e `taxa_alerta`, não só `% sustentado`. |
-| **Juiz (% sustentado)** | `1 − negativos / N` em `analise_camadas` | Tendência de grounding; `% incompleto` alto é diagnóstico, não alerta operacional. |
-| **HITL** (`sumario_hitl`, fila CSV) | Amostra com adjudicação humana | Complementa B quando juiz e embedding divergem; tuned deixou 11 itens (1,1%) na fila com 0% `taxa_alerta`. |
-
-ROUGE-L baixo pode coexistir com METEOR alto entre corridas do mesmo harness: respostas correctas em paráfrase penalizam n-gramas (ROUGE/BLEU) enquanto METEOR recompensa alinhamento semântico. Recuperação (`taxa_chunk_ouro_no_top_k`) deve estar alinhada antes de atribuir diferenças só à geração ou ao juiz.
-
-Métricas operacionais: ver `summary.json` (`sumario_lexical`, `sumario_operacional`, `analise_camadas`). Notas locais opcionais podem ficar em `docs/` (gitignored).
-
-Para publicar agregados localmente: `uv run python scripts/publish_run_evidence.py outputs/run_<id>` (destino configurável; por omissão pasta local gitignored).
+Métricas: [`docs/metrics.md`](docs/metrics.md) · publicar agregados: `uv run python scripts/publish_run_evidence.py outputs/run_<id>`.
 
 ### Trabalho relacionado
 
@@ -123,7 +108,7 @@ Para publicar agregados localmente: `uv run python scripts/publish_run_evidence.
 | **ARES** | Avaliação automática de sistemas RAG | [stanford-futuredata/ARES](https://github.com/stanford-futuredata/ARES) |
 | **lm-evaluation-harness** | Benchmarks de LLM (não RAG end-to-end) | [EleutherAI/lm-evaluation-harness](https://github.com/EleutherAI/lm-evaluation-harness) |
 
-Este harness complementa essas ferramentas com **verificação multicamada configurável**, **padrões determinísticos**, **fila HITL** e **artefactos auditáveis** orientados a FairytaleQA pt-BR. Integração opcional com RAGAS via extra `ragas` no `pyproject.toml`.
+Este harness complementa essas ferramentas com **verificação multicamada configurável**, **padrões determinísticos**, **fila HITL** e **artefactos auditáveis** orientados a FairytaleQA pt-BR. Integração opcional com RAGAS via extra `ragas` — comparativos versionados em [`assets/benchmarks/comparatives.json`](assets/benchmarks/comparatives.json).
 
 ---
 
@@ -433,7 +418,7 @@ tests/
 
 ## Documentação
 
-Documentação de arquitectura, premissas, métricas, specs e evidência é mantida **localmente** na pasta `docs/` (gitignored — não aparece no GitHub). Este README e o código em `src/llm_evaluation/` são a referência pública do harness.
+Documentação técnica em [`docs/`](docs/) (arquitectura, premissas, specs, métricas). Relatórios internos e notas pessoais estão listados em `.gitignore`.
 
 ---
 

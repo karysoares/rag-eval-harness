@@ -15,6 +15,7 @@ from llm_evaluation.schema_registry import (
     MANIFEST_SCHEMA_VERSION,
     PREDICTIONS_SCHEMA_VERSIONS_OK,
     SUMMARY_SCHEMA_VERSION,
+    SUMMARY_SCHEMA_VERSIONS_OK,
     validate_manifest,
     validate_prediction_record,
     validate_summary,
@@ -123,7 +124,7 @@ def detect_schema_mismatch(
     if (
         summary
         and summary.get("schema_version")
-        and str(summary["schema_version"]) != SUMMARY_SCHEMA_VERSION
+        and str(summary["schema_version"]) not in SUMMARY_SCHEMA_VERSIONS_OK
     ):
         return True
     if (

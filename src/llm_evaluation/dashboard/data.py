@@ -91,6 +91,8 @@ def fila_revisao_csv_path(run_dir: Path) -> Path | None:
         raw = op.get("fila_revisao_csv")
         if raw:
             p = Path(str(raw))
+            if not p.is_absolute():
+                p = run_dir / p
             if p.is_file():
                 return p
     return None

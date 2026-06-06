@@ -80,7 +80,9 @@ def assert_publishable(run_dir: Path) -> None:
 
     report = run_embedding_policy(run_dir, write=True)
     criterio = report.get("criterio_p0")
-    if not isinstance(criterio, dict) or not criterio.get("passou"):
+    if not isinstance(criterio, dict):
+        raise SystemExit("criterio_p0 em falta — publicação abortada")
+    if criterio.get("aplicavel") is not False and not criterio.get("passou"):
         raise SystemExit("criterio_p0.passou é false — publicação abortada")
 
 

@@ -178,7 +178,7 @@ def reprocess_run_dir(
             )
             if isinstance(summary.get("sumario_operacional"), dict):
                 so = cast(dict[str, object], summary["sumario_operacional"])
-                so["fila_revisao_csv"] = str(fila_path.resolve())
+                so["fila_revisao_csv"] = fila_path.relative_to(run_dir).as_posix()
                 so["fila_revisao_humana"] = fila_counts
 
             write_summary(summary, summary_path)

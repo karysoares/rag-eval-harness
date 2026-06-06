@@ -257,6 +257,8 @@ def _file_entry(
     if path.suffix == ".jsonl":
         entry["n_linhas"] = count_jsonl_lines(path)
         entry["schema_version"] = schema_version or PREDICTIONS_SCHEMA_VERSION
+        if path.stat().st_size == 0:
+            entry["nota"] = "vazio: nenhum registo gravado"
     elif path.suffix == ".json":
         entry["schema_version"] = schema_version or SUMMARY_SCHEMA_VERSION
     return entry

@@ -6,7 +6,8 @@ from typing import Any
 
 PREDICTIONS_SCHEMA_VERSION = "1.1"
 PREDICTIONS_SCHEMA_VERSIONS_OK = frozenset({"1.0", "1.1"})
-SUMMARY_SCHEMA_VERSION = "1.0"
+SUMMARY_SCHEMA_VERSION = "1.1"
+SUMMARY_SCHEMA_VERSIONS_OK = frozenset({"1.0", "1.1"})
 MANIFEST_SCHEMA_VERSION = "1.0"
 
 # Campos de topo em cada linha de predictions.jsonl (v1.0).
@@ -115,10 +116,13 @@ KNOWN_MANIFEST_TOP_FIELDS = frozenset(
 
 MIGRATION_NOTES: dict[str, str] = {
     "predictions": (
-        "v1.0: campo schema_version por linha; corridas anteriores sem versão "
-        "continuam legíveis — validação em modo aviso."
+        "v1.0→v1.1: schema_version por linha; v1.0 continua legível. "
+        "v1.1 alinha metadados structured output em meta.qualidade_geracao / contexto_juiz."
     ),
-    "summary": ("v1.0: schema_version + metadados_corrida; KPI por reference_type inalterado."),
+    "summary": (
+        "v1.0→v1.1: schema_version incrementado; campos KPI inalterados. "
+        "fila_revisao_csv passa a path relativo ao run_dir. v1.0 continua legível."
+    ),
     "manifest": "v1.0: manifest.json opcional; ausência não invalida corridas antigas.",
 }
 
@@ -149,7 +153,7 @@ def validate_summary(obj: dict[str, Any], *, strict: bool = False) -> list[str]:
         ver = obj.get("schema_version")
         if ver is None:
             issues.append("aviso: summary de comparação sem schema_version")
-        elif ver != SUMMARY_SCHEMA_VERSION:
+        elif ver is not None and ver not in SUMMARY_SCHEMA_VERSIONS_OK:
             issues.append(f"schema_version inesperado em summary: {ver!r}")
         if "metadados_corrida" not in obj:
             issues.append("summary comparação sem metadados_corrida")
@@ -157,7 +161,7 @@ def validate_summary(obj: dict[str, Any], *, strict: bool = False) -> list[str]:
     ver = obj.get("schema_version")
     if ver is None:
         issues.append("aviso: summary sem schema_version (corrida legada)")
-    elif ver != SUMMARY_SCHEMA_VERSION:
+    elif ver is not None and ver not in SUMMARY_SCHEMA_VERSIONS_OK:
         issues.append(f"schema_version inesperado em summary: {ver!r}")
     unknown = set(obj.keys()) - KNOWN_SUMMARY_TOP_FIELDS
     if unknown:

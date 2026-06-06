@@ -1,0 +1,271 @@
+{
+  "schema_version": "1.1",
+  "gerado_em_utc": "2026-06-06T18:05:02.149268+00:00",
+  "nota": "Comparativos versionados; regenerar com scripts/export_comparatives.py",
+  "eixos": {
+    "interno": {
+      "planos_kpi": [
+        "A",
+        "B"
+      ],
+      "pergunta": "Como evolui o harness com calibração de config no mesmo corpus?",
+      "condicoes": "FairytaleQA pt-BR validation N=1025, política embedding_e_juiz"
+    },
+    "externo": {
+      "planos_kpi": [
+        "B"
+      ],
+      "pergunta": "O juiz/embedding do harness alinha-se com faithfulness RAGAS?",
+      "condicoes": "Mesma amostra de itens; RAGAS usa LLM externo — diagnóstico, não ground truth"
+    },
+    "calibracao_p0": {
+      "planos_kpi": [
+        "B"
+      ],
+      "pergunta": "A política embedding_e_juiz reduz FP vs qualquer_critico?",
+      "condicoes": "Replay offline em fixture answer_lists + corrida lexical tuned"
+    },
+    "hitl": {
+      "planos_kpi": [
+        "C"
+      ],
+      "pergunta": "Juiz e detector concordam com o revisor humano na amostra?",
+      "condicoes": "6 itens adjudicados; não extrapolar ao corpus"
+    }
+  },
+  "comparativos": {
+    "interno_fairytale_evolution": {
+      "eixo": "interno",
+      "adaptador": "FairytaleQA-translated-ptBR (hub)",
+      "split": "validation",
+      "n_itens": 1025,
+      "politica_agregacao": "embedding_e_juiz",
+      "corridas": [
+        {
+          "label": "baseline",
+          "run_id": "run_20260517T190713Z",
+          "config": "configs/ptbr_fairytale_full.yaml",
+          "metricas": {
+            "media_meteor": 0.783,
+            "media_rouge_l_f": 0.38,
+            "media_bleu": 0.206,
+            "taxa_juiz_sustentado_diagnostico": 0.796,
+            "taxa_alerta": 0.0
+          }
+        },
+        {
+          "label": "calibrado",
+          "run_id": "run_20260517T215023Z",
+          "config": "configs/ptbr_fairytale_full.yaml",
+          "metricas": {
+            "media_meteor": 0.823,
+            "media_rouge_l_f": 0.366,
+            "media_bleu": 0.193,
+            "taxa_juiz_sustentado_diagnostico": 0.954,
+            "taxa_alerta": 0.015
+          }
+        },
+        {
+          "label": "pos_calibracao",
+          "run_id": "run_20260518T074031Z",
+          "config": "configs/ptbr_fairytale_full.yaml",
+          "metricas": {
+            "media_meteor": 0.826,
+            "media_rouge_l_f": 0.367,
+            "media_bleu": 0.191,
+            "taxa_juiz_sustentado_diagnostico": 0.915,
+            "taxa_alerta": 0.007
+          }
+        },
+        {
+          "label": "tuned",
+          "run_id": "run_20260606T121845Z",
+          "config": "configs/ptbr_fairytale_tuned.yaml",
+          "metricas": {
+            "media_meteor": 0.901,
+            "media_rouge_l_f": 0.349,
+            "media_bleu": 0.175,
+            "taxa_juiz_sustentado_diagnostico": 0.78,
+            "taxa_alerta": 0.0
+          }
+        }
+      ],
+      "nota": "Mesmo harness; variam YAML, calibração embedding e parâmetros RAG/geração."
+    },
+    "referencia_tuned_n1025": {
+      "eixo": "interno",
+      "run_id": "run_20260606T121845Z",
+      "config": "configs/ptbr_fairytale_tuned.yaml",
+      "harness": {
+        "n_itens": 1025,
+        "media_meteor": 0.9009349610691344,
+        "media_rouge_l_f": 0.3491728408306999,
+        "media_bleu": 0.1745584701250178,
+        "media_f1_token": 0.3471017512776025,
+        "taxa_chunk_ouro_top_k": 1.0,
+        "taxa_juiz_sustentado_diagnostico": 0.7795121951219512,
+        "taxa_alerta": 0.0
+      },
+      "policy": {
+        "run_id": "run_20260606T121845Z",
+        "tipo_referencia": "lexical",
+        "n_referencia_aceitavel": 532,
+        "politicas": {
+          "qualquer_critico": {
+            "n_anomalias": 46,
+            "taxa_alerta": 0.0448780487804878,
+            "taxa_falso_alarme_no_gold_correto": 0.03007518796992481,
+            "cohen_kappa_anomalia_vs_gold": 0.03183473701438915
+          },
+          "embedding_e_juiz": {
+            "n_anomalias": 0,
+            "taxa_alerta": 0.0,
+            "taxa_falso_alarme_no_gold_correto": 0.0,
+            "cohen_kappa_anomalia_vs_gold": 0.0
+          }
+        },
+        "reducao_fp_relativa": 1.0,
+        "criterio_p0_sugerido": {
+          "aplicavel": true,
+          "passou": true,
+          "fp_embedding_e_juiz": 0.0
+        }
+      }
+    },
+    "externo_ragas_amostra": {
+      "eixo": "externo",
+      "run_id": "run_20260606T121845Z",
+      "n_amostra": 25,
+      "ragas": {
+        "disponivel": true,
+        "n": 25,
+        "scores": {
+          "faithfulness": 0.8166666666666668,
+          "answer_relevancy": 0.9357435706748114
+        },
+        "media_faithfulness": 0.8166666666666668,
+        "media_answer_relevancy": 0.9357435706748114
+      },
+      "harness_amostra": {
+        "n": 25,
+        "taxa_embedding_baixo": 0.0,
+        "taxa_juiz_sustentado": 0.72,
+        "media_f1_token": 0.4501750679377009
+      },
+      "nota": "RAGAS usa LLM externo; diagnóstico, não ground truth."
+    },
+    "calibracao_p0": {
+      "eixo": "calibracao_p0",
+      "casos": [
+        {
+          "label": "fixture_answer_lists",
+          "run_id": "policy_validation_run",
+          "tipo_referencia": "answer_lists",
+          "n_referencia_aceitavel": 3,
+          "politicas": {
+            "qualquer_critico": {
+              "n_anomalias": 4,
+              "taxa_alerta": 0.8,
+              "taxa_falso_alarme_no_gold_correto": 1.0,
+              "cohen_kappa_anomalia_vs_gold": -0.4285714285714287
+            },
+            "embedding_e_juiz": {
+              "n_anomalias": 1,
+              "taxa_alerta": 0.2,
+              "taxa_falso_alarme_no_gold_correto": 0.0,
+              "cohen_kappa_anomalia_vs_gold": 0.5454545454545455
+            }
+          },
+          "reducao_fp_relativa": 1.0,
+          "criterio_p0_sugerido": {
+            "aplicavel": true,
+            "passou": true,
+            "fp_embedding_e_juiz": 0.0
+          }
+        },
+        {
+          "label": "fairytale_lexical_tuned",
+          "run_id": "run_20260606T121845Z",
+          "tipo_referencia": "lexical",
+          "n_referencia_aceitavel": 532,
+          "politicas": {
+            "qualquer_critico": {
+              "n_anomalias": 46,
+              "taxa_alerta": 0.0448780487804878,
+              "taxa_falso_alarme_no_gold_correto": 0.03007518796992481,
+              "cohen_kappa_anomalia_vs_gold": 0.03183473701438915
+            },
+            "embedding_e_juiz": {
+              "n_anomalias": 0,
+              "taxa_alerta": 0.0,
+              "taxa_falso_alarme_no_gold_correto": 0.0,
+              "cohen_kappa_anomalia_vs_gold": 0.0
+            }
+          },
+          "reducao_fp_relativa": 1.0,
+          "criterio_p0_sugerido": {
+            "aplicavel": true,
+            "passou": true,
+            "fp_embedding_e_juiz": 0.0
+          }
+        }
+      ],
+      "nota": "FP = taxa_falso_alarme_no_gold_correto sob embedding_e_juiz; P0 passa se FP < 15%."
+    },
+    "hitl_amostra": {
+      "eixo": "hitl",
+      "run_id": "run_20260517T190713Z",
+      "config_path": "ptbr_fairytale_full.yaml",
+      "n_adjudicados": 6,
+      "sumario_hitl": {
+        "n_itens_rotulados": 6,
+        "n_pendentes_fila": null,
+        "taxa_aceitavel_humana": 1.0,
+        "nota": "Métricas HITL: amostra rotulada; não extrapolar ao corpus inteiro.",
+        "detector_vs_humano": {
+          "confusao": {
+            "vp": 0,
+            "fn": 0,
+            "fp": 0,
+            "vn": 6
+          },
+          "precisao": null,
+          "revocacao": null,
+          "ic95_precisao": null,
+          "ic95_revocacao": null,
+          "kappa": null
+        },
+        "embedding_vs_humano": {
+          "confusao": {
+            "vp": 0,
+            "fn": 0,
+            "fp": 0,
+            "vn": 6
+          },
+          "precisao": null,
+          "revocacao": null,
+          "ic95_precisao": null,
+          "ic95_revocacao": null,
+          "kappa": null
+        },
+        "juiz_vs_humano": {
+          "confusao": {
+            "vp": 0,
+            "fn": 0,
+            "fp": 6,
+            "vn": 0
+          },
+          "precisao": 0.0,
+          "revocacao": null,
+          "ic95_precisao": [
+            0.0,
+            0.3903430336530645
+          ],
+          "ic95_revocacao": null,
+          "kappa": 0.0
+        }
+      },
+      "nota": "Amostra humana pequena; não extrapolar ao corpus."
+    }
+  }
+}

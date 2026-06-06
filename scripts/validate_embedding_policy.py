@@ -6,8 +6,10 @@ Uso:
   uv run python scripts/validate_embedding_policy.py outputs/run_<id> --write
 
 Requer ``predictions.jsonl``. Compara ``qualquer_critico`` vs ``embedding_e_juiz``
-usando os sinais já gravados (sem API). Critério P0: FP gold-correto &lt; 15%% com
-``embedding_e_juiz`` quando a corrida OR tinha FP dominado por embedding.
+usando os sinais já gravados (sem API). Critério P0: FP em referência aceitável
+&lt; 15%% com ``embedding_e_juiz``.
+Para ``reference_type=answer_lists`` usa ``gold_correto`` booleano; para
+``lexical`` usa overlap léxico (F1/EM). Com ``reference_type=none``, P0 é N/A.
 """
 
 from __future__ import annotations
@@ -52,6 +54,7 @@ def main() -> None:
 
     records = load_records_from_predictions_jsonl(pred)
     summary_path = run_dir / "summary.json"
+    reference_type: str | None = "answer_lists"
     protocol: dict[str, object] = {
         "verify_gold": False,
         "verify_embedding": True,
@@ -65,6 +68,9 @@ def main() -> None:
     }
     if summary_path.is_file():
         raw = json.loads(summary_path.read_text(encoding="utf-8"))
+        rt = raw.get("tipo_referencia_ativo")
+        if isinstance(rt, str):
+            reference_type = rt
         pa = raw.get("protocolo_ativo")
         if isinstance(pa, dict):
             protocol.update(
@@ -105,19 +111,31 @@ def main() -> None:
         verify_judge=bool(protocol["verify_judge"]),
         negative_judge_verdicts=list(protocol["negative_judge_verdicts"]),  # type: ignore[arg-type]
         judge_aggregation_verdicts=([str(x) for x in agg_v] if isinstance(agg_v, list) else None),
+        reference_type=reference_type,
     )
     report["nota_limiar"] = report_note
     if emb_thr is not None:
         report["embedding_min_cosine_offline"] = emb_thr
     mit = report["politicas"].get("embedding_e_juiz", {})
     fp_mit = mit.get("taxa_falso_alarme_no_gold_correto") if isinstance(mit, dict) else None
-    ok = fp_mit is not None and fp_mit < args.fp_threshold
+    p0_aplicavel = reference_type != "none"
+    if p0_aplicavel:
+        ok = fp_mit is not None and fp_mit < args.fp_threshold
+        passou: bool | None = ok
+    else:
+        ok = True
+        passou = None
     report["criterio_p0"] = {
+        "aplicavel": p0_aplicavel,
+        "reference_type": reference_type,
         "fp_threshold": args.fp_threshold,
-        "passou": ok,
+        "passou": passou,
         "nota": (
             "embedding_e_juiz deve reduzir FP só-embedding; "
-            "juiz sustentado não deve gerar anomalia."
+            "juiz sustentado não deve gerar anomalia. "
+            "Referência aceitável: gold_correto (answer_lists) ou overlap léxico (lexical)."
+            if p0_aplicavel
+            else "P0 não aplicável sem referência automática (reference_type=none)."
         ),
     }
 

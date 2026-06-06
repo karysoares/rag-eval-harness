@@ -78,6 +78,7 @@ def test_run_single_corrida_manifest_matches_summary(
     op = summary.get("sumario_operacional")
     assert isinstance(op, dict)
     assert op.get("fila_revisao_csv")
+    assert not str(op.get("fila_revisao_csv")).startswith("/")
     assert summary.get("protocolo_ajustado")
     fila_csv = run_dir / "analise_manual" / "fila_revisao_humana.csv"
     assert fila_csv.is_file()

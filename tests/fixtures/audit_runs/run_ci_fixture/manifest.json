@@ -53,8 +53,8 @@
     },
     {
       "nome": "summary.json",
-      "tamanho_bytes": 7038,
-      "sha256": "c83c2966b1977715fa359b24092c7a51484d7fe067d0322f6892d153fe2632c8",
+      "tamanho_bytes": 5491,
+      "sha256": "2f9fde07f1aeecabca71d053f40ee3f6384320048ce7af83dd1d6b2bc79190be",
       "schema_version": "1.0"
     }
   ],

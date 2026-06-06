@@ -35,8 +35,20 @@ def test_assert_publishable_blocks_failed_p0(monkeypatch, tmp_path: Path) -> Non
     monkeypatch.setattr(
         mod,
         "run_embedding_policy",
-        lambda *_a, **_k: {"criterio_p0": {"passou": False}},
+        lambda *_a, **_k: {"criterio_p0": {"aplicavel": True, "passou": False}},
     )
 
     with pytest.raises(SystemExit, match="criterio_p0.passou"):
         mod.assert_publishable(tmp_path)
+
+
+def test_assert_publishable_skips_p0_when_not_applicable(monkeypatch, tmp_path: Path) -> None:
+    mod = _module()
+    monkeypatch.setattr(mod, "validate_run_artifacts", lambda *_a, **_k: [])
+    monkeypatch.setattr(mod, "predictions_contain_judge_cot", lambda *_a, **_k: False)
+    monkeypatch.setattr(
+        mod,
+        "run_embedding_policy",
+        lambda *_a, **_k: {"criterio_p0": {"aplicavel": False, "passou": None}},
+    )
+    mod.assert_publishable(tmp_path)
