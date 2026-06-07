@@ -51,6 +51,5 @@ notebooks/
 .cursor/
 .idea/
 
-# Lockfile e GitHub Actions locais (não publicar)
+# Lockfile local (não publicar)
 uv.lock
-.github/
