@@ -7,7 +7,7 @@
 [![CI](https://github.com/karysoares/rag-eval-harness/actions/workflows/ci.yml/badge.svg)](https://github.com/karysoares/rag-eval-harness/actions/workflows/ci.yml)
 [![Python 3.11+](https://img.shields.io/badge/python-3.11%2B-blue.svg)](https://www.python.org/downloads/)
 
-[Getting started](#getting-started) · [Usage](#usage) · [Architecture](#architecture) · [Documentation](#documentation)
+[Getting started](#getting-started) · [Usage](#usage) · [Architecture](#architecture) · [Contributing](CONTRIBUTING.md)
 
 </div>
 
@@ -79,7 +79,7 @@ uv run llm-eval --compare-runs outputs/run_a outputs/run_b
 uv run llm-eval --apply-hitl adjudicacoes_hitl.csv --resume outputs/run_<id>
 ```
 
-Ablation de baselines (`--profile so_embeddings`, `so_juiz`, `hibrido`) e orquestração experimental (`--orchestration multiplo --experimental`): ver `llm-eval --help` e [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
+Ablation de baselines (`--profile so_embeddings`, `so_juiz`, `hibrido`) e orquestração experimental (`--orchestration multiplo --experimental`): ver `llm-eval --help`.
 
 ## Architecture
 
@@ -95,7 +95,7 @@ flowchart LR
   SUM --> DASH[Dashboard]
 ```
 
-Fluxo completo, camadas de sinal, agregação e orquestração: [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) · premissas de avaliação: [`docs/PREMISSAS.md`](docs/PREMISSAS.md).
+Três camadas de verificação pós-resposta — **grounding** (embedding), **juiz LLM** e **referência léxica** — combinam-se via `aggregation.policy` no YAML; métricas de recuperação são diagnósticas e não entram na agregação por defeito.
 
 ## Run outputs
 
@@ -121,7 +121,7 @@ Auditoria: `uv run python scripts/audit_run.py outputs --strict`
 | [`configs/smoke_amostra.yaml`](configs/smoke_amostra.yaml) | 2 itens offline (CI) |
 | [`configs/baseline_*.yaml`](configs/baseline_embedding_only.yaml) | Ablation embedding / juiz |
 
-Chaves YAML, políticas de agregação e tipos de referência: [`docs/metrics.md`](docs/metrics.md) · specs: [`docs/specs/`](docs/specs/).
+Políticas de agregação: `qualquer_critico`, `embedding_e_juiz`, `todos_criticos`. Tipos de referência: `lexical`, `answer_lists`, `none` (chave `dataset.reference_type`).
 
 ## Dashboard
 
@@ -136,16 +136,13 @@ Interface local sobre `outputs/run_*` — KPI, inspector Q/A, calibração, padr
 
 Resultados agregados versionados em [`assets/benchmarks/comparatives.json`](assets/benchmarks/comparatives.json). Regenerar a partir de corridas locais: [`assets/benchmarks/README.md`](assets/benchmarks/README.md).
 
-## Documentation
+## Further reading
 
 | Documento | Conteúdo |
 |-----------|----------|
-| [`docs/README.md`](docs/README.md) | Índice e trilha de leitura |
-| [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) | Fluxo e separação harness / sistema |
-| [`docs/metrics.md`](docs/metrics.md) | Definições de métricas e baselines |
-| [`docs/specs/`](docs/specs/) | Especificações verificáveis |
 | [`CONTRIBUTING.md`](CONTRIBUTING.md) | Ambiente, testes e PRs |
 | [`CHANGELOG.md`](CHANGELOG.md) | Histórico de versões |
+| [`assets/benchmarks/README.md`](assets/benchmarks/README.md) | Comparativos e regeneração |
 
 ## Related projects
 

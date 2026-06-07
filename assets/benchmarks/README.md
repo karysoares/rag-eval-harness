@@ -28,5 +28,3 @@ uv run python scripts/export_comparatives.py --ragas --ragas-n 25
 ```
 
 Golden HITL versionado: [`tests/fixtures/hitl_fairytale_sample/`](../../tests/fixtures/hitl_fairytale_sample/).
-
-Ver também [`docs/benchmarks/ragas_comparison.md`](../../docs/benchmarks/ragas_comparison.md).

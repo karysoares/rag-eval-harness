@@ -37,14 +37,9 @@ run_comparison.json
 # Prompts legados na raiz (fonte canónica: src/llm_evaluation/prompts/)
 /prompts/
 
-# Documentação interna sensível (specs e arquitectura são versionadas)
+# Documentação interna (local only)
 .docs/
-docs/evidencia/
-docs/learning-notes.md
-docs/RELATORIO_AVALIACAO.md
-docs/RELATORIO_MELHORIAS.md
-docs/PARECER_HIRING.md
-docs/DIARIO_DE_BORDO.md
+docs/
 
 notebooks/
 # Cursor IDE (local only)

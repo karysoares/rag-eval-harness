@@ -5,10 +5,8 @@ Obrigado pelo interesse em contribuir. Este repositório é um harness de avalia
 ## Before opening a PR
 
 1. **Open an issue** para discutir mudanças que alterem métricas, agregação ou schemas de `summary.json` / `manifest.json`.
-2. Leia [Architecture](README.md#architecture) e [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
-3. Novo dataset → adaptador em `src/llm_evaluation/adapters/` + config de exemplo em `configs/` + spec em `docs/specs/adapters/`.
-
-Documentação técnica: [`docs/README.md`](docs/README.md) · checklist de release: [`docs/RELEASE_CHECKLIST.md`](docs/RELEASE_CHECKLIST.md).
+2. Leia [Architecture](README.md#architecture) e explore `src/llm_evaluation/`.
+3. Novo dataset → adaptador em `src/llm_evaluation/adapters/` + config de exemplo em `configs/`.
 
 ## Development setup
 
@@ -41,7 +39,7 @@ RUN_INTEGRATION=1 uv run pytest tests/integration -q
 
 ## Secrets and artifacts
 
-Não commite `.env`, chaves API nem `outputs/`. Corridas geram artefactos em `outputs/run_*` (gitignored). Use `.env.example` como modelo.
+Não commite `.env`, chaves API, `outputs/` nem `docs/` (documentação interna, gitignored). Use `.env.example` como modelo.
 
 ## Package naming
 
