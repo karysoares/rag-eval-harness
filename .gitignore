@@ -51,7 +51,6 @@ notebooks/
 .cursor/
 .idea/
 
-# Changelog, lockfile e GitHub Actions locais (não publicar)
-CHANGELOG.md
+# Lockfile e GitHub Actions locais (não publicar)
 uv.lock
 .github/

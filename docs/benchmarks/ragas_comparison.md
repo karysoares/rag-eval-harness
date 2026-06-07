@@ -2,7 +2,7 @@
 
 Parte do framework de comparativos — **Plano B**, eixo **externo**. RAGAS é diagnóstico cruzado, não ground truth.
 
-Ver também: [`../../assets/benchmarks/README.md`](../../assets/benchmarks/README.md) · [`../../README.md`](../../README.md#comparativos--quatro-eixos-não-misturar).
+Ver também: [`../../assets/benchmarks/README.md`](../../assets/benchmarks/README.md) · [`../../README.md`](../../README.md#benchmarks).
 
 ## Uso
 

@@ -88,7 +88,7 @@ Para corridas reprodutíveis no repositório: `configs/ptbr_fairytale.yaml` (Fai
 
 ### Tabela multi-dataset (corridas locais)
 
-O README publica agregados de corridas FairytaleQA pt-BR (`hub`) e amostra local (`amostra_local`). **Não misture N nem `reference_type` entre linhas** — Plano A (`sumario_lexical`) só é comparável dentro do mesmo adaptador e tamanho de amostra. Recuperação e juiz são diagnósticos transversais; ver secção «Comparativos» no README.
+Agregados versionados em [`assets/benchmarks/comparatives.json`](../assets/benchmarks/comparatives.json). **Não misture N nem `reference_type` entre corridas** — `sumario_lexical` só é comparável dentro do mesmo adaptador e tamanho de amostra. Recuperação e juiz são diagnósticos transversais; ver [`assets/benchmarks/README.md`](../assets/benchmarks/README.md).
 
 ### FairytaleQA pt-BR — interpretação léxica (Plano A)
 
