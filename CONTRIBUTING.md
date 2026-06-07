@@ -17,12 +17,16 @@ uv sync --extra dev --extra dashboard
 cp .env.example .env   # só para corridas com API; CI e smoke mock não precisam
 ```
 
+O `uv.lock` está versionado para instalações reprodutíveis.
+
 ## Running tests
+
+Os mesmos gates do CI:
 
 ```bash
 uv run ruff check . && uv run ruff format --check .
 uv run mypy src
-uv run pytest -q
+uv run pytest --cov=llm_evaluation --cov-fail-under=75 -q
 ```
 
 Smoke offline (sem API):
@@ -39,7 +43,7 @@ RUN_INTEGRATION=1 uv run pytest tests/integration -q
 
 ## Secrets and artifacts
 
-Não commite `.env`, chaves API, `outputs/` nem `docs/` (documentação interna, gitignored). Use `.env.example` como modelo.
+Não commite `.env`, chaves API, `outputs/`, `assets/evidencia/` nem `docs/` (documentação interna, gitignored). Use `.env.example` como modelo.
 
 ## Package naming
 

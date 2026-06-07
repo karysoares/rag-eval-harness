@@ -1,4 +1,4 @@
-"""Orquestração em pilha única (padrão). Ver `docs/techniques/multi-agent-critic-patterns.md`."""
+"""Orquestração em pilha única (padrão): retrieve → generate → verify."""
 
 from __future__ import annotations
 

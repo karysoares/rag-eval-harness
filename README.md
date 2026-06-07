@@ -41,7 +41,7 @@ Métricas de recuperação são **diagnósticas**. Sinais pós-resposta (embeddi
 
 ```bash
 git clone https://github.com/karysoares/rag-eval-harness.git && cd rag-eval-harness
-uv sync --extra dev --extra dashboard
+uv sync --extra dev --extra dashboard   # usa uv.lock versionado
 cp .env.example .env   # OPENAI_API_KEY — só para corridas com API
 ```
 

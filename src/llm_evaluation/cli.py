@@ -76,7 +76,7 @@ def main() -> None:
             "  3) FairytaleQA pt-BR: uv run llm-eval --config configs/default.yaml\n"
             "  4) Análise offline: uv run llm-eval --analyze-run outputs/run_<id>\n"
             "\n"
-            "Documentação: README.md, docs/ARCHITECTURE.md, docs/specs/\n"
+            "Documentação: README.md, CONTRIBUTING.md\n"
             "Visualização: uv run llm-eval-dashboard"
         ),
     )

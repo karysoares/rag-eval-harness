@@ -17,7 +17,6 @@ from llm_evaluation.hitl_io import (
     read_hitl_csv,
     write_staged_hitl_csv,
 )
-from llm_evaluation.prompt_resources import prompt_bytes, source_prompts_dir
 from llm_evaluation.reporting import ensure_run_dir, record_to_json, summarize, write_summary
 from llm_evaluation.run_artifacts import (
     CorruptedPredictionsError,
@@ -120,19 +119,6 @@ def test_strict_jsonl_validates_all_lines_not_sample(tmp_path: Path) -> None:
     pred.write_text("\n".join(text) + "\n", encoding="utf-8")
     issues = validate_run_artifacts(run_dir, strict=True)
     assert any("linha 6" in i for i in issues)
-
-
-def test_packaged_prompts_match_legacy_repo_copy() -> None:
-    legacy = Path(__file__).resolve().parents[1] / "prompts"
-    packaged = source_prompts_dir()
-    if not legacy.is_dir():
-        pytest.skip("sem prompts/ legado na raiz")
-    divergent: list[str] = []
-    for path in packaged.glob("*.txt"):
-        other = legacy / path.name
-        if other.is_file() and prompt_bytes(path.name) != other.read_bytes():
-            divergent.append(path.name)
-    assert divergent == [], f"prompts divergentes: {divergent}"
 
 
 def test_gitignore_protects_local_files_without_hiding_packaged_prompts() -> None:

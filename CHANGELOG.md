@@ -11,13 +11,13 @@ Primeira publicação como **rag-eval-harness** — harness reprodutível para p
 - Adaptador FairytaleQA pt-BR ([`benjleite/FairytaleQA-translated-ptBR`](https://huggingface.co/datasets/benjleite/FairytaleQA-translated-ptBR)) e configs `default.yaml`, `ptbr_fairytale_full.yaml`, `ptbr_fairytale_tuned.yaml`.
 - Smoke offline: `configs/smoke_amostra.yaml` (2 itens, sem Hub); CI com `test_pipeline_e2e_mock.py`.
 - Saída estruturada JSON para respondedor, crítico e juiz (`structured_output.py`).
-- Prompts empacotados em `src/llm_evaluation/prompts/` com testes de paridade no CI.
+- Prompts empacotados em `src/llm_evaluation/prompts/` com teste de integridade no CI.
 - Verificação multicamada: embedding, juiz RAG pt, referência léxica; agregação configurável.
 - Padrões determinísticos, fila de revisão humana e HITL no dashboard.
 - Dashboard Streamlit offline (`llm-eval-dashboard`).
 - Artefactos auditáveis e scripts `audit_run.py`, `publish_run_evidence.py`, `validate_embedding_policy.py`.
 - Comparativos versionados em `assets/benchmarks/comparatives.json`.
-- Documentação: specs, `ARCHITECTURE.md`, `PREMISSAS.md`, `CONTRIBUTING.md`, `CITATION.cff`.
+- Documentação pública: `README.md`, `CONTRIBUTING.md`, `CHANGELOG.md`, `CITATION.cff`.
 
 ### Fixed
 
@@ -25,7 +25,7 @@ Primeira publicação como **rag-eval-harness** — harness reprodutível para p
 - Orquestração `multiplo` exige `--experimental`; `meta.flag_critica` é diagnóstico, não entra em `flag_anomalia`.
 - Cobertura mínima 75% e `audit_run.py --strict` no workflow CI.
 - Chaves genéricas `por_camada_vs_referencia` em `analise_camadas`.
-- Specs e `docs/metrics.md` alinhados ao contrato actual do respondedor.
+- Contrato do respondedor alinhado ao schema JSON empacotado.
 
 ### Changed
 

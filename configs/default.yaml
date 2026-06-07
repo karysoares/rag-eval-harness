@@ -63,7 +63,7 @@ llm:
 aggregation:
   policy: embedding_e_juiz
 
-# Fila humana pós-corrida e gap RAG–resposta (alinhado a docs/calibracao_embedding.md)
+# Fila humana pós-corrida e gap RAG–resposta
 operacional:
   fila_min_score_recuperacao: 0.5
   gap_min_score_recuperacao: 0.5

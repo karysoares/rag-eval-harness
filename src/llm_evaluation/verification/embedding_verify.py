@@ -1,6 +1,6 @@
 """Verificação de grounding por embeddings.
 
-Ver `docs/techniques/embedding-similarity-vs-semantic-equivalence.md`.
+Coseno resposta↔chunks recuperados (grounding por similaridade).
 """
 
 from __future__ import annotations

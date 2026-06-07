@@ -1,4 +1,4 @@
-"""Métricas de recuperação por item (pré-geração). Ver `docs/ARCHITECTURE.md`."""
+"""Métricas de recuperação por item (pré-geração, diagnósticas)."""
 
 from __future__ import annotations
 

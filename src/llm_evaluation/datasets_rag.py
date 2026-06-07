@@ -1,6 +1,6 @@
 """Construção de corpus RAG e injeção de falha de recuperação.
 
-Ver `docs/techniques/dense-retrieval-and-chunking.md`.
+Chunks por item e injeção opcional de falha de recuperação.
 """
 
 from __future__ import annotations

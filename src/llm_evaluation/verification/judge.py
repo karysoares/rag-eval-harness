@@ -1,4 +1,4 @@
-"""LLM como juiz. Ver `docs/specs/003-judge.md` e `prompts/`."""
+"""LLM como juiz RAG (prompts em ``src/llm_evaluation/prompts/``)."""
 
 from __future__ import annotations
 

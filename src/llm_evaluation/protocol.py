@@ -1,7 +1,6 @@
 """Validação e normalização do protocolo de corrida (config + itens carregados).
 
-Evita combinações enganosas documentadas em ``docs/PREMISSAS.md`` (ex.: RAG sem corpus
-com verificação de embedding activa).
+Evita combinações enganosas (ex.: RAG sem corpus com verificação de embedding activa).
 """
 
 from __future__ import annotations

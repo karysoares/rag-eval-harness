@@ -1,4 +1,4 @@
-"""Carrega configuração YAML. Definições de métricas em `docs/metrics.md`."""
+"""Carrega configuração YAML reprodutível."""
 
 from __future__ import annotations
 

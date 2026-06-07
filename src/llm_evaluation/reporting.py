@@ -1,4 +1,4 @@
-"""Escrita de sumários JSONL/CSV. Ver `docs/metrics.md`."""
+"""Escrita de sumários JSONL/CSV e `summary.json`."""
 
 from __future__ import annotations
 

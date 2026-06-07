@@ -1,6 +1,6 @@
 """Cliente LLM compatível com OpenAI, com timeout, parâmetros configuráveis e retry com backoff.
 
-Ver `docs/SECURITY.md` (sem segredos em logs).
+Nunca registe chaves API nem conteúdo sensível em logs.
 """
 
 from __future__ import annotations

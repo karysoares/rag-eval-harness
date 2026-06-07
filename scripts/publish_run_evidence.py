@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Publica agregados de uma corrida em docs/evidencia/ (sem PII)."""
+"""Publica agregados de uma corrida em assets/evidencia/ (sem PII)."""
 
 from __future__ import annotations
 
@@ -162,12 +162,12 @@ def publish_run_evidence(run_dir: Path, dest: Path) -> None:
 
 
 def main() -> None:
-    p = argparse.ArgumentParser(description="Copia agregados para docs/evidencia/")
+    p = argparse.ArgumentParser(description="Copia agregados para assets/evidencia/")
     p.add_argument("run_dir", type=Path)
     p.add_argument(
         "--dest",
         type=Path,
-        default=Path("docs/evidencia"),
+        default=Path("assets/evidencia"),
     )
     p.add_argument(
         "--skip-gates",

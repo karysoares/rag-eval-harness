@@ -77,7 +77,7 @@ def _ref_layer_description(reference_type: str | None) -> str:
         )
     return (
         "Referência positiva = item com referência automática «incorreta». "
-        "Camada positiva = gatilho dessa camada (ver docs/metrics.md)."
+        "Camada positiva = gatilho dessa camada."
     )
 
 

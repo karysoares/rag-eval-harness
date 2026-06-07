@@ -14,7 +14,7 @@
 #   uv run llm-eval --compare-runs outputs/run_a outputs/run_b   # → run_comparison.json
 #
 # Calibração embedding_min_cosine: ajuste com validate_embedding_policy.py (--embedding-min-cosine 0.26–0.28)
-# alvo FP gold-correto < 15% com política embedding_e_juiz (ver docs/metrics.md).
+# alvo FP gold-correto < 15% com política embedding_e_juiz
 
 seed: 42
 orchestration: unico

@@ -1,4 +1,4 @@
-"""Heurísticas para referências do tipo ``answer_lists``. Ver `docs/metrics.md`."""
+"""Heurísticas para referências do tipo ``answer_lists``."""
 
 from __future__ import annotations
 

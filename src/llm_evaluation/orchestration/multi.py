@@ -1,6 +1,5 @@
 """Orquestração multi-agente: respondedor + passo de crítica.
 
-Ver `docs/techniques/multi-agent-critic-patterns.md`.
 A crítica é sinal diagnóstico em ``meta``; não entra na agregação de ``flag_anomalia``.
 """
 

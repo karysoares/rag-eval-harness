@@ -1,6 +1,6 @@
 """Recuperação densa com embedders plugáveis.
 
-Ver `docs/techniques/dense-retrieval-and-chunking.md`.
+Chunks por item e ranking coseno pergunta↔passagem.
 """
 
 from __future__ import annotations
