@@ -14,7 +14,6 @@ from llm_evaluation.dashboard.data import (
 from llm_evaluation.schema_registry import (
     MANIFEST_SCHEMA_VERSION,
     PREDICTIONS_SCHEMA_VERSIONS_OK,
-    SUMMARY_SCHEMA_VERSION,
     SUMMARY_SCHEMA_VERSIONS_OK,
     validate_manifest,
     validate_prediction_record,

@@ -86,7 +86,9 @@ EIXOS_META: dict[str, dict[str, Any]] = {
     "externo": {
         "planos_kpi": ["B"],
         "pergunta": "O juiz/embedding do harness alinha-se com faithfulness RAGAS?",
-        "condicoes": "Mesma amostra de itens; RAGAS usa LLM externo — diagnóstico, não ground truth",
+        "condicoes": (
+            "Mesma amostra de itens; RAGAS usa LLM externo — diagnóstico, não ground truth"
+        ),
     },
     "calibracao_p0": {
         "planos_kpi": ["B"],
@@ -206,7 +208,10 @@ def _harness_lexical(summary: dict[str, Any]) -> dict[str, Any]:
 
 
 def _ragas_comparative(run_dir: Path, *, n: int) -> dict[str, Any] | None:
-    from llm_evaluation.benchmarks.ragas_adapter import run_ragas_sample, summarize_harness_grounding
+    from llm_evaluation.benchmarks.ragas_adapter import (
+        run_ragas_sample,
+        summarize_harness_grounding,
+    )
     from llm_evaluation.evaluation_metrics import load_records_from_predictions_jsonl
 
     pred = run_dir / "predictions.jsonl"
@@ -350,7 +355,9 @@ def main() -> None:
         comparativos["calibracao_p0"] = {
             "eixo": "calibracao_p0",
             "casos": calibracao_casos,
-            "nota": "FP = taxa_falso_alarme_no_gold_correto sob embedding_e_juiz; P0 passa se FP < 15%.",
+            "nota": (
+                "FP = taxa_falso_alarme_no_gold_correto sob embedding_e_juiz; P0 passa se FP < 15%."
+            ),
         }
 
     hitl_run = args.run_hitl.expanduser()
