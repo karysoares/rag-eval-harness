@@ -42,4 +42,4 @@ jobs:
         run: uv run pytest tests/test_pipeline_e2e_mock.py -q
 
       - name: Pytest
-        run: uv run pytest --cov=llm_evaluation --cov-report=term-missing --cov-fail-under=75
+        run: uv run pytest --cov=llm_evaluation --cov-report=term-missing --cov-fail-under=80
