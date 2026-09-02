@@ -8,6 +8,7 @@ from __future__ import annotations
 import json
 import os
 import random
+import re
 import sys
 import threading
 import time
@@ -123,6 +124,30 @@ class ApiUsageSnapshot:
     total_tokens: int
 
 
+#: Padrões de credencial a mascarar em mensagens que possam chegar a artefactos.
+_SECRET_PATTERNS = (
+    # userinfo numa URL: https://utilizador:senha@host
+    re.compile(r"(?<=://)[^/\s:@]+:[^/\s@]+@"),
+    # chaves estilo OpenAI/Anthropic e afins
+    re.compile(r"\b(sk|rk|pk)-[A-Za-z0-9_\-]{16,}"),
+    re.compile(r"\bBearer\s+[A-Za-z0-9._\-]{16,}"),
+)
+
+
+def redact_secrets(text: str) -> str:
+    """Mascara credenciais num texto destinado a logs ou artefactos.
+
+    Mensagens de erro acabam em ``meta.processing_error`` dentro de
+    ``predictions.jsonl``, que é um artefacto que se publica. Uma base URL com
+    ``https://utilizador:senha@host`` — forma aceite por proxies e gateways —
+    entrava aí em claro, e o corpo de resposta de um fornecedor pode ecoar o
+    cabeçalho ``Authorization``. Nada disto deve sobreviver à serialização.
+    """
+    for padrao in _SECRET_PATTERNS:
+        text = padrao.sub(lambda m: "***@" if m.group(0).endswith("@") else "***", text)
+    return text
+
+
 class PermanentApiError(RuntimeError):
     """Erro 4xx não transitório: configuração errada, não falha de rede.
 
@@ -153,7 +178,7 @@ def _permanent_http_error(response: httpx.Response) -> PermanentApiError:
     detalhe = " ".join(detalhe.split())[:400]
     sufixo = f": {detalhe}" if detalhe else ""
     return PermanentApiError(
-        f"HTTP {response.status_code} de {response.request.url}{sufixo}",
+        redact_secrets(f"HTTP {response.status_code} de {response.request.url}{sufixo}"),
     )
 
 

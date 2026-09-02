@@ -31,6 +31,7 @@ from llm_evaluation.llm_client import (
     judge_base_url_from_env,
     openai_base_url_from_env,
     pool_size_for_concurrency,
+    redact_secrets,
     resolve_models_from_env,
 )
 from llm_evaluation.observability import (
@@ -452,7 +453,9 @@ def _failed_record(
         "orquestracao": orchestration,
         "processing_error": {
             "type": type(err).__name__,
-            "message": str(err),
+            # Defesa em profundidade: a mensagem é serializada em predictions.jsonl,
+            # que se publica. Qualquer excepção — não só as nossas — passa por aqui.
+            "message": redact_secrets(str(err)),
             "attempts": attempt,
         },
         "metricas_recuperacao": {"rag_ativo": False},
