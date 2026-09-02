@@ -9,7 +9,12 @@ from dataclasses import dataclass, replace
 
 from llm_evaluation.config import AppConfig
 from llm_evaluation.datasets_rag import build_chunks_for_item
-from llm_evaluation.llm_client import resolve_models_from_env
+from llm_evaluation.llm_client import (
+    endpoint_host,
+    judge_base_url_from_env,
+    openai_base_url_from_env,
+    resolve_models_from_env,
+)
 from llm_evaluation.types import EvalItem
 
 
@@ -113,14 +118,20 @@ def validate_protocol(cfg: AppConfig, items: list[EvalItem]) -> None:
 
 
 def judge_generator_same_model_warning() -> str | None:
-    """Aviso quando juiz e gerador partilham o mesmo modelo (auto-referência)."""
+    """Aviso quando juiz e gerador são o mesmo modelo no mesmo fornecedor.
+
+    Nomes iguais em endpoints diferentes (ex.: ``qwen2.5`` local vs. hospedado)
+    continuam a ser modelos distintos na prática, por isso não disparam o aviso.
+    """
     llm_model, judge_model = resolve_models_from_env()
-    if llm_model == judge_model:
-        return (
-            f"JUDGE_MODEL igual a LLM_MODEL ({llm_model!r}): o juiz avalia respostas "
-            "do mesmo modelo — defina JUDGE_MODEL distinto para avaliação válida."
-        )
-    return None
+    if llm_model != judge_model:
+        return None
+    if endpoint_host(openai_base_url_from_env()) != endpoint_host(judge_base_url_from_env()):
+        return None
+    return (
+        f"JUDGE_MODEL igual a LLM_MODEL ({llm_model!r}) no mesmo endpoint: o juiz avalia "
+        "respostas do mesmo modelo — defina JUDGE_MODEL (ou JUDGE_BASE_URL) distinto."
+    )
 
 
 def collect_protocol_avisos(cfg: AppConfig) -> list[str]:
@@ -144,6 +155,8 @@ def build_protocolo_ativo(cfg: AppConfig) -> dict[str, object]:
 
     pattern_settings = build_pattern_settings(cfg.patterns.overrides or None)
     llm_model, judge_model = resolve_models_from_env()
+    gen_host = endpoint_host(openai_base_url_from_env())
+    judge_host = endpoint_host(judge_base_url_from_env())
 
     return {
         "verify_gold": cfg.verification.verify_gold,
@@ -154,6 +167,9 @@ def build_protocolo_ativo(cfg: AppConfig) -> dict[str, object]:
         "embedding_use_gold_chunk": cfg.verification.embedding_use_gold_chunk,
         "embedding_min_cosine": cfg.verification.embedding_min_cosine,
         "judge_prompt_style": cfg.verification.judge_prompt_style,
+        # Necessário para reproduzir o prompt exacto do juiz (ex.: amostragem de
+        # auto-consistência); sem isto o replay usaria contexto sem tecto.
+        "judge_max_context_chars": cfg.verification.judge_max_context_chars,
         "judge_gate_embedding_max_cosine": cfg.verification.judge_gate_embedding_max_cosine,
         "judge_gate_requires_strong_context": (cfg.verification.judge_gate_requires_strong_context),
         "judge_gate_min_retrieval_score": (cfg.verification.judge_gate_min_retrieval_score),
@@ -184,7 +200,12 @@ def build_protocolo_ativo(cfg: AppConfig) -> dict[str, object]:
         "models": {
             "llm_model": llm_model,
             "judge_model": judge_model,
-            "judge_same_as_generator": llm_model == judge_model,
+            "judge_same_as_generator": (llm_model == judge_model and gen_host == judge_host),
+            # Só scheme+host: identifica o fornecedor sem arrastar caminhos ou
+            # credenciais que possam vir embutidos na URL configurada.
+            "llm_endpoint": gen_host,
+            "judge_endpoint": judge_host,
+            "judge_endpoint_distinto": gen_host != judge_host,
         },
         "pattern_settings": {
             "f1_forte_min": pattern_settings.f1_forte_min,
