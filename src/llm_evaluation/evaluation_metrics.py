@@ -460,6 +460,7 @@ def compare_metric_reports(
     labels: list[str],
     *,
     flags_por_corrida: dict[str, dict[str, bool]] | None = None,
+    falhas_por_corrida: dict[str, set[str]] | None = None,
 ) -> dict[str, object]:
     """Métricas de alto nível lado a lado para vários relatórios / sumários.
 
@@ -552,7 +553,7 @@ def compare_metric_reports(
         "significancia": significancia,
     }
     if flags_por_corrida:
-        emparelhada = pairwise_paired_significance(flags_por_corrida)
+        emparelhada = pairwise_paired_significance(flags_por_corrida, falhas_por_corrida)
         if emparelhada:
             out["significancia_emparelhada"] = emparelhada
     return out
@@ -608,16 +609,27 @@ def anomaly_flags_by_item(records: list[RunRecord]) -> dict[str, bool]:
     return {r.item_id: bool(r.anomaly_flag) for r in records}
 
 
+def failed_item_ids(records: list[RunRecord]) -> set[str]:
+    """Itens que não chegaram a ser avaliados (erro de execução, não do sistema)."""
+    return {r.item_id for r in records if isinstance(r.meta.get("processing_error"), dict)}
+
+
 def load_anomaly_flags(run_dir: Path) -> dict[str, bool]:
     """Lê ``predictions.jsonl`` (ou o primeiro ``predictions_*.jsonl``) e devolve as flags."""
+    return load_run_flags(run_dir)[0]
+
+
+def load_run_flags(run_dir: Path) -> tuple[dict[str, bool], set[str]]:
+    """``({id_item: flag_anomalia}, {ids que falharam})`` de um diretório de corrida."""
     rd = run_dir.resolve()
     primary = rd / "predictions.jsonl"
-    if primary.is_file():
-        return anomaly_flags_by_item(load_records_from_predictions_jsonl(primary))
-    alt = sorted(rd.glob("predictions_*.jsonl"))
-    if alt:
-        return anomaly_flags_by_item(load_records_from_predictions_jsonl(alt[0]))
-    return {}
+    if not primary.is_file():
+        alt = sorted(rd.glob("predictions_*.jsonl"))
+        if not alt:
+            return {}, set()
+        primary = alt[0]
+    registos = load_records_from_predictions_jsonl(primary)
+    return anomaly_flags_by_item(registos), failed_item_ids(registos)
 
 
 def paired_significance(
@@ -625,13 +637,27 @@ def paired_significance(
     flags_a: dict[str, bool],
     label_b: str,
     flags_b: dict[str, bool],
+    *,
+    failed_a: set[str] | None = None,
+    failed_b: set[str] | None = None,
 ) -> dict[str, object] | None:
     """McNemar exato/qui-quadrado + bootstrap emparelhado sobre os itens comuns.
 
     ``b`` conta itens marcados só por A; ``c`` itens marcados só por B. Devolve
     ``None`` quando não há sobreposição de itens (desenho não emparelhado).
+
+    **Itens com erro de execução são excluídos.** ``_failed_record`` marca
+    ``flag_anomalia`` para que a falha seja revista, o que é correcto para a fila
+    operacional mas venenoso aqui: uma corrida que perdeu itens por rate limit ou
+    quota apareceria com anomalias "exclusivas" que nada têm a ver com a qualidade
+    do sistema avaliado. Num caso real, 9 falhas de API produziram um McNemar
+    significativo (p=0.004) que media apenas propagação de faturação. As contagens
+    excluídas ficam no resultado, e uma exclusão assimétrica gera aviso explícito.
     """
-    common = sorted(set(flags_a) & set(flags_b))
+    excluidos_a = failed_a or set()
+    excluidos_b = failed_b or set()
+    excluidos = excluidos_a | excluidos_b
+    common = sorted((set(flags_a) & set(flags_b)) - excluidos)
     if not common:
         return None
     va = [flags_a[i] for i in common]
@@ -649,6 +675,15 @@ def paired_significance(
         "mcnemar": mcnemar_test(b, c),
         "bootstrap_emparelhado": paired_bootstrap_diff_ci(va, vb),
     }
+    n_exc_a, n_exc_b = len(excluidos_a), len(excluidos_b)
+    if n_exc_a or n_exc_b:
+        out["excluidos_por_erro"] = {"a": n_exc_a, "b": n_exc_b}
+        if n_exc_a != n_exc_b:
+            out["aviso_exclusao_assimetrica"] = (
+                f"{label_a} perdeu {n_exc_a} item(ns) por erro de execução e "
+                f"{label_b} perdeu {n_exc_b}. A comparação usa só os itens que ambas "
+                "avaliaram; verifique se a assimetria indica um problema de infraestrutura."
+            )
     mc = out["mcnemar"]
     if isinstance(mc, dict):
         p = mc.get("p_valor")
@@ -658,13 +693,22 @@ def paired_significance(
 
 def pairwise_paired_significance(
     flags_por_corrida: dict[str, dict[str, bool]],
+    falhas_por_corrida: dict[str, set[str]] | None = None,
 ) -> list[dict[str, object]]:
     """Aplica :func:`paired_significance` a todos os pares de corridas."""
+    falhas = falhas_por_corrida or {}
     labels = list(flags_por_corrida)
     out: list[dict[str, object]] = []
     for i, la in enumerate(labels):
         for lb in labels[i + 1 :]:
-            res = paired_significance(la, flags_por_corrida[la], lb, flags_por_corrida[lb])
+            res = paired_significance(
+                la,
+                flags_por_corrida[la],
+                lb,
+                flags_por_corrida[lb],
+                failed_a=falhas.get(la),
+                failed_b=falhas.get(lb),
+            )
             if res is not None:
                 out.append(res)
     return out

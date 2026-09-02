@@ -164,3 +164,56 @@ def test_mcnemar_p_valor_nunca_excede_um() -> None:
             assert isinstance(p, float)
             assert 0.0 <= p <= 1.0
             assert not math.isnan(p)
+
+
+class TestExclusaoDeFalhas:
+    """Itens que falharam na execução não podem contar como desacordo de sistemas.
+
+    Regressão de um caso real: 9 itens perderam-se por quota esgotada, viraram
+    `_failed_record` (que marca `flag_anomalia=True` para irem à revisão) e o
+    McNemar devolveu p=0.004 — a medir propagação de faturação, não juízes.
+    """
+
+    def test_falhas_sao_excluidas_do_teste(self) -> None:
+        a = {f"i{n}": False for n in range(10)}
+        b = dict(a)
+        for n in range(3):
+            a[f"i{n}"] = True  # falhas marcadas como anomalia
+        res = paired_significance("A", a, "B", b, failed_a={"i0", "i1", "i2"})
+        assert res is not None
+        assert res["n_itens_comuns"] == 7
+        assert res["so_a"] == 0
+        assert res["mcnemar"] is None  # sem discordantes reais
+
+    def test_sem_exclusao_a_falha_falsifica_o_resultado(self) -> None:
+        """O mesmo desenho sem exclusão produz um efeito que não existe."""
+        a = {f"i{n}": n < 3 for n in range(10)}
+        b = {f"i{n}": False for n in range(10)}
+        res = paired_significance("A", a, "B", b)
+        assert res is not None
+        assert res["so_a"] == 3
+        assert res["mcnemar"] is not None
+
+    def test_exclusao_assimetrica_gera_aviso(self) -> None:
+        a = {f"i{n}": False for n in range(10)}
+        res = paired_significance("A", a, "B", dict(a), failed_a={"i0"}, failed_b=set())
+        assert res is not None
+        assert res["excluidos_por_erro"] == {"a": 1, "b": 0}
+        assert "aviso_exclusao_assimetrica" in res
+
+    def test_exclusao_simetrica_nao_gera_aviso(self) -> None:
+        a = {f"i{n}": False for n in range(10)}
+        res = paired_significance("A", a, "B", dict(a), failed_a={"i0"}, failed_b={"i1"})
+        assert res is not None
+        assert res["excluidos_por_erro"] == {"a": 1, "b": 1}
+        assert "aviso_exclusao_assimetrica" not in res
+
+    def test_sem_falhas_nao_acrescenta_campos(self) -> None:
+        a = {"i0": True, "i1": False}
+        res = paired_significance("A", a, "B", {"i0": False, "i1": False})
+        assert res is not None
+        assert "excluidos_por_erro" not in res
+
+    def test_todas_as_sobreposicoes_excluidas_devolve_none(self) -> None:
+        a = {"i0": True}
+        assert paired_significance("A", a, "B", {"i0": False}, failed_a={"i0"}) is None
