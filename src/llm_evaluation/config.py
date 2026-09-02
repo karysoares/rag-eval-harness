@@ -109,6 +109,10 @@ class GenerationConfig:
 @dataclass
 class LlmConfig:
     timeout_seconds: float
+    #: Itens processados em paralelo. 1 = sequencial (padrão, reprodutível e
+    #: conservador quanto a rate limits). A ordem de ``predictions.jsonl`` é
+    #: preservada independentemente do valor. Env ``LLM_EVAL_CONCURRENCY`` sobrepõe-se.
+    concurrency: int = 1
 
 
 @dataclass
@@ -542,7 +546,10 @@ def load_config(path: Path) -> AppConfig:
                 ),
             ),
         ),
-        llm=LlmConfig(timeout_seconds=float(_req(ll, "timeout_seconds"))),
+        llm=LlmConfig(
+            timeout_seconds=float(_req(ll, "timeout_seconds")),
+            concurrency=max(1, int(ll.get("concurrency", 1) or 1)),
+        ),
         aggregation=AggregationConfig(policy=aggregation_policy),
         baselines=BaselinesConfig(
             profile=baseline_profile,

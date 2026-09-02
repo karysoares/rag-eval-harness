@@ -2,9 +2,10 @@
 
 from __future__ import annotations
 
+import threading
 import time
 from dataclasses import dataclass, field
-from typing import Any, Literal
+from typing import Any, Literal, cast
 
 from llm_evaluation.llm_client import LlmClient
 from llm_evaluation.types import RunRecord
@@ -20,13 +21,31 @@ class LlmCallUsage:
     completion_tokens: int
     total_tokens: int
     latency_ms: float
+    #: Epoch do início da chamada; necessário para posicionar spans na timeline.
+    started_at: float = 0.0
+    #: ``scheme://host`` do fornecedor, para distinguir juiz local de API.
+    endpoint: str = ""
 
 
 @dataclass
 class UsageAccumulator:
-    """Acumula chamadas LLM de uma corrida (thread-local por instância no batch)."""
+    """Acumula as chamadas LLM do item **em curso nesta thread**.
 
-    calls: list[LlmCallUsage] = field(default_factory=list)
+    O acumulador é partilhado pelos clientes da corrida, mas ``snapshot_for_item``
+    /``reset`` delimitam um item. Com workers concorrentes, uma lista única
+    misturaria as chamadas de itens diferentes; o armazenamento thread-local
+    garante que cada item contabiliza apenas os seus próprios tokens e latência.
+    """
+
+    _tls: threading.local = field(default_factory=threading.local, repr=False, compare=False)
+
+    @property
+    def calls(self) -> list[LlmCallUsage]:
+        calls = getattr(self._tls, "calls", None)
+        if calls is None:
+            calls = []
+            self._tls.calls = calls
+        return cast(list[LlmCallUsage], calls)
 
     def record(self, usage: LlmCallUsage) -> None:
         self.calls.append(usage)
@@ -51,6 +70,12 @@ class UsageAccumulator:
             "modelos": sorted({c.model for c in self.calls}),
         }
 
+    def drain(self) -> list[LlmCallUsage]:
+        """Devolve as chamadas do item nesta thread e limpa. Usado pela telemetria."""
+        calls = list(self.calls)
+        self.calls.clear()
+        return calls
+
     def reset(self) -> None:
         self.calls.clear()
 
@@ -65,14 +90,17 @@ class TrackingLlmClient:
         *,
         role: LlmRole,
         model: str,
+        endpoint: str = "",
     ) -> None:
         self._inner = inner
         self._acc = accumulator
         self._role = role
         self._model = model
+        self._endpoint = endpoint
 
     def complete(self, system: str, user: str, **kwargs: Any) -> str:
         t0 = time.perf_counter()
+        started_at = time.time()
         text = self._inner.complete(system, user, **kwargs)
         latency_ms = (time.perf_counter() - t0) * 1000.0
         last = getattr(self._inner, "last_usage", None)
@@ -85,6 +113,8 @@ class TrackingLlmClient:
                     completion_tokens=int(last.completion_tokens),
                     total_tokens=int(last.total_tokens),
                     latency_ms=round(latency_ms, 2),
+                    started_at=started_at,
+                    endpoint=self._endpoint,
                 )
             )
         else:
@@ -96,6 +126,8 @@ class TrackingLlmClient:
                     completion_tokens=0,
                     total_tokens=0,
                     latency_ms=round(latency_ms, 2),
+                    started_at=started_at,
+                    endpoint=self._endpoint,
                 )
             )
         return text
