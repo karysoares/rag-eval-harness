@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 import threading
 import time
 from dataclasses import dataclass, field
@@ -60,6 +61,15 @@ class UsageAccumulator:
         by_role: dict[str, int] = {}
         for c in self.calls:
             by_role[c.role] = by_role.get(c.role, 0) + 1
+        por_modelo: dict[str, dict[str, int]] = {}
+        for c in self.calls:
+            alvo = por_modelo.setdefault(
+                c.model,
+                {"n_chamadas": 0, "tokens_prompt": 0, "tokens_completion": 0},
+            )
+            alvo["n_chamadas"] += 1
+            alvo["tokens_prompt"] += c.prompt_tokens
+            alvo["tokens_completion"] += c.completion_tokens
         return {
             "n_chamadas_llm": len(self.calls),
             "tokens_prompt": pt,
@@ -68,6 +78,9 @@ class UsageAccumulator:
             "latencia_ms_total": round(lat, 2),
             "chamadas_por_papel": by_role,
             "modelos": sorted({c.model for c in self.calls}),
+            # Sem esta repartição, um custo agregado com gerador e juiz em modelos
+            # diferentes é falso — e essa é a configuração recomendada.
+            "por_modelo": por_modelo,
         }
 
     def drain(self) -> list[LlmCallUsage]:
@@ -145,16 +158,76 @@ def estimate_cost_usd(
     ) * price_per_1m_completion
 
 
+def prices_by_model_from_env() -> dict[str, tuple[float, float]]:
+    """Preços por modelo em ``LLM_EVAL_PRICES`` (``modelo:prompt:completion,…``).
+
+    Um par único de preços aplicado a todos os modelos subestima ou sobrestima o
+    custo sempre que gerador e juiz são modelos diferentes — a configuração que
+    este harness recomenda. Exemplo::
+
+        LLM_EVAL_PRICES=gpt-4o-mini:0.15:0.60,gpt-4o:2.50:10.00,qwen2.5:7b:0:0
+
+    O nome do modelo pode conter ``:`` (as etiquetas do Ollama são ``modelo:tag``),
+    por isso a separação é feita **pela direita**: os dois últimos campos são
+    sempre os preços e tudo o que vem antes é o nome. Modelos locais entram com
+    preço zero para ficarem no total em vez de aparecerem como "sem preço".
+    """
+    bruto = os.environ.get("LLM_EVAL_PRICES", "").strip()
+    if not bruto:
+        return {}
+    precos: dict[str, tuple[float, float]] = {}
+    for entrada in bruto.split(","):
+        partes = entrada.strip().rsplit(":", 2)
+        if len(partes) != 3 or not partes[0].strip():
+            continue
+        try:
+            precos[partes[0].strip()] = (float(partes[1]), float(partes[2]))
+        except ValueError:
+            continue
+    return precos
+
+
+def _cost_by_model(
+    por_modelo: dict[str, dict[str, int]],
+    precos: dict[str, tuple[float, float]],
+) -> dict[str, Any]:
+    """Custo repartido por modelo; assinala os modelos sem preço conhecido."""
+    detalhe: dict[str, Any] = {}
+    total = 0.0
+    sem_preco: list[str] = []
+    for modelo, uso in sorted(por_modelo.items()):
+        par = precos.get(modelo)
+        if par is None:
+            sem_preco.append(modelo)
+            continue
+        custo = estimate_cost_usd(
+            prompt_tokens=uso["tokens_prompt"],
+            completion_tokens=uso["tokens_completion"],
+            price_per_1m_prompt=par[0],
+            price_per_1m_completion=par[1],
+        )
+        total += custo
+        detalhe[modelo] = {**uso, "custo_usd": round(custo, 6)}
+    saida: dict[str, Any] = {"por_modelo": detalhe, "custo_total_usd": round(total, 6)}
+    if sem_preco:
+        # Explícito: um total silenciosamente parcial seria pior que nenhum.
+        saida["modelos_sem_preco"] = sorted(sem_preco)
+        saida["nota_parcial"] = "Total exclui os modelos sem preço configurado em LLM_EVAL_PRICES."
+    return saida
+
+
 def summarize_run_observability(
     records: list[RunRecord],
     *,
     price_per_1m_prompt: float | None = None,
     price_per_1m_completion: float | None = None,
+    prices_by_model: dict[str, tuple[float, float]] | None = None,
 ) -> dict[str, Any] | None:
     """Agrega ``meta.observabilidade`` de todos os itens; opcional custo estimado."""
     pt = ct = tt = n_calls = 0
     lat_total = 0.0
     n_with_meta = 0
+    por_modelo: dict[str, dict[str, int]] = {}
     for r in records:
         obs = r.meta.get("observabilidade")
         if not isinstance(obs, dict):
@@ -165,6 +238,17 @@ def summarize_run_observability(
         ct += int(obs.get("tokens_completion") or 0)
         tt += int(obs.get("tokens_total") or 0)
         lat_total += float(obs.get("latencia_ms_total") or 0.0)
+        bruto_modelo = obs.get("por_modelo")
+        if isinstance(bruto_modelo, dict):
+            for modelo, uso in bruto_modelo.items():
+                if not isinstance(uso, dict):
+                    continue
+                alvo = por_modelo.setdefault(
+                    str(modelo),
+                    {"n_chamadas": 0, "tokens_prompt": 0, "tokens_completion": 0},
+                )
+                for chave in alvo:
+                    alvo[chave] += int(uso.get(chave) or 0)
     if n_with_meta == 0:
         return None
     out: dict[str, Any] = {
@@ -176,6 +260,11 @@ def summarize_run_observability(
         "latencia_ms_total": round(lat_total, 2),
         "media_tokens_por_item": round(tt / n_with_meta, 1) if n_with_meta else None,
     }
+    if por_modelo:
+        out["uso_por_modelo"] = por_modelo
+    precos = prices_by_model if prices_by_model is not None else prices_by_model_from_env()
+    if precos and por_modelo:
+        out["custo"] = _cost_by_model(por_modelo, precos)
     if price_per_1m_prompt is not None and price_per_1m_completion is not None:
         out["custo_estimado_usd"] = round(
             estimate_cost_usd(
@@ -187,6 +276,7 @@ def summarize_run_observability(
             6,
         )
         out["nota_custo"] = (
-            "Estimativa com preços por 1M tokens (OPENAI_PRICE_* no ambiente ou argumentos)."
+            "Preço único aplicado a todos os modelos: só é correcto quando gerador "
+            "e juiz usam o mesmo modelo. Para custo por modelo, defina LLM_EVAL_PRICES."
         )
     return out

@@ -23,9 +23,9 @@ from llm_evaluation.config import (
 from llm_evaluation.eval_items_load import load_eval_items
 from llm_evaluation.evaluation_metrics import (
     compare_metric_reports,
-    load_anomaly_flags,
     load_full_report,
     load_records_from_predictions_jsonl,
+    load_run_flags,
 )
 from llm_evaluation.llm_client import MissingApiKeyError, require_openai_api_key
 from llm_evaluation.orchestration import multi, single
@@ -235,15 +235,21 @@ def main() -> None:
                 raise SystemExit(2)
         reports = [load_full_report(d) for d in dirs]
         labels = _unique_run_labels(dirs)
-        flags = {
-            label: fl
-            for label, d in zip(labels, dirs, strict=True)
-            if (fl := load_anomaly_flags(d))
-        }
+        carregados = {label: load_run_flags(d) for label, d in zip(labels, dirs, strict=True)}
+        flags = {label: fl for label, (fl, _) in carregados.items() if fl}
+        falhas = {label: fa for label, (_, fa) in carregados.items() if label in flags}
+        for label, fa in falhas.items():
+            if fa:
+                print(
+                    f"Aviso: {label} tem {len(fa)} item(ns) com erro de execução; "
+                    "excluídos da estatística emparelhada.",
+                    file=sys.stderr,
+                )
         cmp = compare_metric_reports(
             reports,
             labels,
             flags_por_corrida=flags if len(flags) >= 2 else None,
+            falhas_por_corrida=falhas if len(flags) >= 2 else None,
         )
         out = Path.cwd() / "run_comparison.json"
         out.write_text(json.dumps(cmp, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
@@ -565,13 +571,18 @@ def _run_single_corrida(
         write_summary(summary, run_dir / "summary.json")
     price_p = os.environ.get("OPENAI_PRICE_PER_1M_PROMPT")
     price_c = os.environ.get("OPENAI_PRICE_PER_1M_COMPLETION")
-    if price_p and price_c:
-        from llm_evaluation.observability import summarize_run_observability
+    from llm_evaluation.observability import (
+        prices_by_model_from_env,
+        summarize_run_observability,
+    )
 
+    precos_modelo = prices_by_model_from_env()
+    if (price_p and price_c) or precos_modelo:
         obs = summarize_run_observability(
             records,
-            price_per_1m_prompt=float(price_p),
-            price_per_1m_completion=float(price_c),
+            price_per_1m_prompt=float(price_p) if price_p else None,
+            price_per_1m_completion=float(price_c) if price_c else None,
+            prices_by_model=precos_modelo or None,
         )
         if obs:
             summary["observabilidade"] = obs
