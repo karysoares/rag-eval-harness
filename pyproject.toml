@@ -25,7 +25,7 @@ llm-eval-dashboard = "llm_evaluation.dashboard.launch:main"
 [project.optional-dependencies]
 ragas = [
     "ragas>=0.2.0,<1",
-    "langchain-openai>=0.2.0,<1",
+    "langchain-openai>=0.2.0,<2",
 ]
 # Traces OTLP: serve Phoenix, LangSmith e CloudWatch (via coletor ADOT).
 # O destino `jsonl` e as métricas CloudWatch EMF não precisam deste extra.
