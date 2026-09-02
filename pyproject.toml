@@ -15,7 +15,7 @@ dependencies = [
     "rapidfuzz>=3.0.0,<4",
     "rouge-score>=0.1.2,<1",
     "sacrebleu>=2.4.0,<3",
-    "sentence-transformers>=3.0.0,<5",
+    "sentence-transformers>=3.0.0,<7",
 ]
 
 [project.scripts]
