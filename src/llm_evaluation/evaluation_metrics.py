@@ -12,7 +12,12 @@ from pathlib import Path
 from typing import Any, cast
 
 from llm_evaluation.reference_metrics import referencia_incorreta
-from llm_evaluation.statistics import cohen_kappa, wilson_ci
+from llm_evaluation.statistics import (
+    cohen_kappa,
+    mcnemar_test,
+    paired_bootstrap_diff_ci,
+    wilson_ci,
+)
 from llm_evaluation.types import JudgeResult, RetrievedChunk, RunRecord, VerificationSignals
 
 
@@ -328,7 +333,12 @@ def prediction_row_to_run_record(row: dict[str, Any]) -> RunRecord:
                 raw["cadeia_de_pensamento"] = cot
             conf_raw = _dget(jd, "confianca", "confidence")
             if conf_raw is None:
+                # ``JudgeResult.confianca`` é obrigatório; 0.5 é um valor de
+                # preenchimento, não uma medição. A marca permite que a calibração
+                # (``judge_meta``) descarte estes itens em vez de os tratar como
+                # confiança real e contaminar o ECE.
                 conf_raw = 0.5
+                raw["confianca_ausente"] = True
             judge = JudgeResult(
                 veredito=v_canon,
                 motivo_breve=str(_dget(jd, "motivo_breve", "reason_short") or ""),
@@ -448,8 +458,16 @@ def _infer_reference_type_from_records(records: list[RunRecord]) -> tuple[str, s
 def compare_metric_reports(
     reports: list[dict[str, object]],
     labels: list[str],
+    *,
+    flags_por_corrida: dict[str, dict[str, bool]] | None = None,
 ) -> dict[str, object]:
-    """Métricas de alto nível lado a lado para vários relatórios / sumários."""
+    """Métricas de alto nível lado a lado para vários relatórios / sumários.
+
+    Com ``flags_por_corrida`` (rótulo → ``{id_item: flag_anomalia}``) acrescenta
+    ``significancia_emparelhada``: McNemar + bootstrap emparelhado sobre os itens
+    comuns. É o teste correto quando as corridas partilham o mesmo dataset — ver
+    ``_pairwise_significance`` para a variante não-emparelhada (fallback).
+    """
     rows: list[dict[str, object]] = []
     for label, rep in zip(labels, reports, strict=True):
         cg = (
@@ -528,11 +546,26 @@ def compare_metric_reports(
             }
         )
     significancia = _pairwise_significance(rows)
-    return {"versao_esquema": "1", "corridas": rows, "significancia": significancia}
+    out: dict[str, object] = {
+        "versao_esquema": "2",
+        "corridas": rows,
+        "significancia": significancia,
+    }
+    if flags_por_corrida:
+        emparelhada = pairwise_paired_significance(flags_por_corrida)
+        if emparelhada:
+            out["significancia_emparelhada"] = emparelhada
+    return out
 
 
 def _pairwise_significance(rows: list[dict[str, object]]) -> list[dict[str, object]]:
-    """Teste aproximado de diferença de proporções (taxa alerta) entre pares de corridas."""
+    """Teste **não-emparelhado** de diferença de proporções (taxa de alerta) entre corridas.
+
+    Fallback para quando não há alinhamento por ``id_item`` (corridas sobre datasets
+    ou amostras diferentes). Quando as corridas partilham itens, prefira
+    ``pairwise_paired_significance`` — o teste não-emparelhado sobrestima o
+    erro-padrão e perde poder.
+    """
     out: list[dict[str, object]] = []
     for i, a in enumerate(rows):
         for b in rows[i + 1 :]:
@@ -567,6 +600,73 @@ def _pairwise_significance(rows: list[dict[str, object]]) -> list[dict[str, obje
                     "significativo_95": significativo,
                 },
             )
+    return out
+
+
+def anomaly_flags_by_item(records: list[RunRecord]) -> dict[str, bool]:
+    """``{id_item: flag_anomalia}`` — chave de alinhamento para testes emparelhados."""
+    return {r.item_id: bool(r.anomaly_flag) for r in records}
+
+
+def load_anomaly_flags(run_dir: Path) -> dict[str, bool]:
+    """Lê ``predictions.jsonl`` (ou o primeiro ``predictions_*.jsonl``) e devolve as flags."""
+    rd = run_dir.resolve()
+    primary = rd / "predictions.jsonl"
+    if primary.is_file():
+        return anomaly_flags_by_item(load_records_from_predictions_jsonl(primary))
+    alt = sorted(rd.glob("predictions_*.jsonl"))
+    if alt:
+        return anomaly_flags_by_item(load_records_from_predictions_jsonl(alt[0]))
+    return {}
+
+
+def paired_significance(
+    label_a: str,
+    flags_a: dict[str, bool],
+    label_b: str,
+    flags_b: dict[str, bool],
+) -> dict[str, object] | None:
+    """McNemar exato/qui-quadrado + bootstrap emparelhado sobre os itens comuns.
+
+    ``b`` conta itens marcados só por A; ``c`` itens marcados só por B. Devolve
+    ``None`` quando não há sobreposição de itens (desenho não emparelhado).
+    """
+    common = sorted(set(flags_a) & set(flags_b))
+    if not common:
+        return None
+    va = [flags_a[i] for i in common]
+    vb = [flags_b[i] for i in common]
+    b = sum(1 for x, y in zip(va, vb, strict=True) if x and not y)
+    c = sum(1 for x, y in zip(va, vb, strict=True) if y and not x)
+    out: dict[str, object] = {
+        "par": [label_a, label_b],
+        "metrica": "taxa_alerta",
+        "n_itens_comuns": len(common),
+        "cobertura_a": len(common) / len(flags_a) if flags_a else None,
+        "cobertura_b": len(common) / len(flags_b) if flags_b else None,
+        "so_a": b,
+        "so_b": c,
+        "mcnemar": mcnemar_test(b, c),
+        "bootstrap_emparelhado": paired_bootstrap_diff_ci(va, vb),
+    }
+    mc = out["mcnemar"]
+    if isinstance(mc, dict):
+        p = mc.get("p_valor")
+        out["significativo_95"] = isinstance(p, float) and p < 0.05
+    return out
+
+
+def pairwise_paired_significance(
+    flags_por_corrida: dict[str, dict[str, bool]],
+) -> list[dict[str, object]]:
+    """Aplica :func:`paired_significance` a todos os pares de corridas."""
+    labels = list(flags_por_corrida)
+    out: list[dict[str, object]] = []
+    for i, la in enumerate(labels):
+        for lb in labels[i + 1 :]:
+            res = paired_significance(la, flags_por_corrida[la], lb, flags_por_corrida[lb])
+            if res is not None:
+                out.append(res)
     return out
 
 
