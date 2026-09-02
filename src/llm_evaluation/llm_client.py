@@ -8,6 +8,7 @@ from __future__ import annotations
 import json
 import os
 import random
+import sys
 import threading
 import time
 from dataclasses import dataclass, field
@@ -174,6 +175,8 @@ class OpenAiCompatibleClient:
     #: Ligações simultâneas do pool HTTP. Deve ser >= à concorrência de itens da
     #: corrida; ``pool_size_for_concurrency`` calcula-o e ``run_batch`` passa-o.
     max_connections: int = DEFAULT_MAX_CONNECTIONS
+    #: Ficou verdadeiro se o fornecedor rejeitou o ``temperature`` pedido.
+    temperature_rejected: bool = field(default=False, init=False, compare=False)
     _usage_tls: threading.local = field(
         default_factory=threading.local,
         init=False,
@@ -254,10 +257,54 @@ class OpenAiCompatibleClient:
             payload["response_format"] = {"type": "json_object"}
         return payload
 
+    #: Códigos de erro que chegam como 429 mas nunca recuperam com espera.
+    #: Saldo esgotado ou quota de projeto a zero devolvem 429 como se fosse rate
+    #: limit; retentar com backoff só atrasa a falha e esconde a causa real.
+    QUOTA_ERROR_CODES = (
+        "insufficient_quota",
+        "credit_balance_exhausted",
+        "billing_hard_limit_reached",
+    )
+
+    @classmethod
+    def _is_quota_exhausted(cls, response: httpx.Response) -> bool:
+        """Distingue "excedeu a taxa" de "não tem saldo" dentro de um 429."""
+        try:
+            corpo = response.json()
+        except ValueError:
+            return False
+        erro = corpo.get("error") if isinstance(corpo, dict) else None
+        if not isinstance(erro, dict):
+            return False
+        marcadores = {str(erro.get("type") or ""), str(erro.get("code") or "")}
+        return bool(marcadores & set(cls.QUOTA_ERROR_CODES))
+
     @staticmethod
     def _is_transient_status(code: int) -> bool:
         # 429 e 5xx são transitórios; demais 4xx (auth, payload, etc.) propagam de imediato.
         return code == 429 or 500 <= code < 600
+
+    @staticmethod
+    def _rejects_temperature(response: httpx.Response) -> bool:
+        """400 por o modelo não aceitar o ``temperature`` que enviámos.
+
+        Alguns modelos recentes só admitem a temperatura por omissão e devolvem
+        ``unsupported_value`` para qualquer outra. Como o juiz fixa 0.0 para
+        obter determinismo, esses modelos falhariam **todas** as chamadas — e o
+        fallback heurístico, que responde ``sustentado``, faria um juiz avariado
+        parecer um juiz permissivo. Preferimos perder o determinismo a produzir
+        vereditos silenciosamente falsos, e o facto fica registado em meta.
+        """
+        if response.status_code != 400:
+            return False
+        try:
+            corpo = response.json()
+        except ValueError:
+            return False
+        erro = corpo.get("error") if isinstance(corpo, dict) else None
+        if not isinstance(erro, dict):
+            return False
+        return erro.get("param") == "temperature"
 
     def complete(self, system: str, user: str, *, json_object: bool = False) -> str:
         url = chat_completions_url(self.base_url)
@@ -275,6 +322,20 @@ class OpenAiCompatibleClient:
                 if i >= attempts - 1:
                     break
                 self._sleep_backoff(i)
+                continue
+
+            if r.status_code == 429 and self._is_quota_exhausted(r):
+                raise _permanent_http_error(r)
+
+            if "temperature" in payload and self._rejects_temperature(r):
+                self.temperature_rejected = True
+                payload.pop("temperature")
+                print(
+                    f"[llm] {self.model} não aceita temperature={self.temperature}; "
+                    "a repetir sem o parâmetro (determinismo não garantido).",
+                    file=sys.stderr,
+                    flush=True,
+                )
                 continue
 
             if self._is_transient_status(r.status_code):
