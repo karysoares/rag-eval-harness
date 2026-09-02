@@ -7,11 +7,17 @@ from __future__ import annotations
 
 import json
 import os
+import random
+import threading
 import time
 from dataclasses import dataclass, field
 from typing import Any, Protocol, cast
+from urllib.parse import urlsplit
 
 import httpx
+
+#: Ligações do pool HTTP quando a concorrência não é conhecida (chamadas avulsas).
+DEFAULT_MAX_CONNECTIONS = 32
 
 
 class MissingApiKeyError(RuntimeError):
@@ -34,14 +40,76 @@ def require_openai_api_key() -> str:
     return key
 
 
-def openai_base_url_from_env() -> str:
-    """Resolve OPENAI_BASE_URL: vazio/ausente -> api.openai.com; host sem esquema -> https://."""
-    raw = os.environ.get("OPENAI_BASE_URL", "").strip()
+def _normalize_base_url(raw: str, *, default: str) -> str:
+    """Normaliza uma base URL: vazia -> ``default``; host sem esquema -> ``https://``."""
+    raw = raw.strip()
     if not raw:
-        return "https://api.openai.com"
+        return default
     if raw.startswith("http://") or raw.startswith("https://"):
         return raw.rstrip("/")
     return "https://" + raw.lstrip("/").rstrip("/")
+
+
+def openai_base_url_from_env() -> str:
+    """Resolve OPENAI_BASE_URL: vazio/ausente -> api.openai.com; host sem esquema -> https://."""
+    return _normalize_base_url(
+        os.environ.get("OPENAI_BASE_URL", ""),
+        default="https://api.openai.com",
+    )
+
+
+def judge_base_url_from_env() -> str:
+    """Base URL do juiz: ``JUDGE_BASE_URL``, ou a do gerador quando não definida.
+
+    Permite o par mais útil na prática — gerador numa API paga e juiz num modelo
+    local gratuito (Ollama, vLLM). Além do custo, separa as famílias de modelo:
+    o repo já avisa quando juiz e gerador partilham o modelo (auto-referência).
+    """
+    return _normalize_base_url(
+        os.environ.get("JUDGE_BASE_URL", ""),
+        default=openai_base_url_from_env(),
+    )
+
+
+def judge_api_key_from_env() -> str:
+    """Chave do juiz: ``JUDGE_API_KEY``, ou a do gerador quando não definida.
+
+    Endpoints locais ignoram a chave, mas o protocolo exige uma; use qualquer
+    valor não vazio (ex.: ``JUDGE_API_KEY=ollama``).
+    """
+    key = os.environ.get("JUDGE_API_KEY", "").strip()
+    return key if key else require_openai_api_key()
+
+
+def endpoint_host(base_url: str) -> str:
+    """``scheme://host[:porta]`` de uma base URL, para registo no protocolo.
+
+    Deixa de fora caminho, query e qualquer credencial embutida — o objectivo é
+    identificar o fornecedor no ``summary.json``, não reproduzir a URL completa.
+    """
+    parsed = urlsplit(base_url)
+    if not parsed.scheme or not parsed.netloc:
+        return base_url
+    host = parsed.netloc.rsplit("@", 1)[-1]
+    return f"{parsed.scheme}://{host}"
+
+
+def chat_completions_url(base_url: str) -> str:
+    """Monta o endpoint de chat a partir de uma base, sem duplicar segmentos.
+
+    A maioria dos fornecedores compatíveis publica a base **já com** ``/v1``
+    (``http://localhost:11434/v1``, ``https://openrouter.ai/api/v1``,
+    ``.../compatible-mode/v1``). Concatenar ``/v1/chat/completions`` às cegas
+    produzia ``/v1/v1/chat/completions`` e um 404 — que, não sendo transitório,
+    falhava sem explicar a causa. Aceitam-se as três formas: base sem sufixo,
+    base terminada em ``/v1`` e o endpoint completo.
+    """
+    base = base_url.rstrip("/")
+    if base.endswith("/chat/completions"):
+        return base
+    if base.endswith("/v1"):
+        return base + "/chat/completions"
+    return base + "/v1/chat/completions"
 
 
 @dataclass
@@ -52,6 +120,40 @@ class ApiUsageSnapshot:
     prompt_tokens: int
     completion_tokens: int
     total_tokens: int
+
+
+class PermanentApiError(RuntimeError):
+    """Erro 4xx não transitório: configuração errada, não falha de rede.
+
+    Repetir não ajuda — o valor está em mostrar o que o fornecedor respondeu.
+    """
+
+
+def _permanent_http_error(response: httpx.Response) -> PermanentApiError:
+    """Converte um 4xx no erro do fornecedor, com o corpo da resposta legível.
+
+    Endpoints compatíveis devolvem a causa real no corpo (ex.: Ollama responde
+    ``model 'qwen2.5:7b' not found`` a um 404). Sem isto, o utilizador vê apenas
+    "404 Not Found" na URL certa e conclui que o endpoint está errado.
+    """
+    detalhe = ""
+    try:
+        corpo = response.json()
+        if isinstance(corpo, dict):
+            erro = corpo.get("error")
+            if isinstance(erro, dict):
+                detalhe = str(erro.get("message") or "")
+            elif erro:
+                detalhe = str(erro)
+        if not detalhe:
+            detalhe = response.text
+    except ValueError:
+        detalhe = response.text
+    detalhe = " ".join(detalhe.split())[:400]
+    sufixo = f": {detalhe}" if detalhe else ""
+    return PermanentApiError(
+        f"HTTP {response.status_code} de {response.request.url}{sufixo}",
+    )
 
 
 @dataclass
@@ -69,7 +171,66 @@ class OpenAiCompatibleClient:
     rate_limit_backoff_seconds: tuple[float, ...] = field(
         default_factory=lambda: (2.0, 5.0, 15.0, 30.0),
     )
-    last_usage: ApiUsageSnapshot | None = field(default=None, init=False, repr=False)
+    #: Ligações simultâneas do pool HTTP. Deve ser >= à concorrência de itens da
+    #: corrida; ``pool_size_for_concurrency`` calcula-o e ``run_batch`` passa-o.
+    max_connections: int = DEFAULT_MAX_CONNECTIONS
+    _usage_tls: threading.local = field(
+        default_factory=threading.local,
+        init=False,
+        repr=False,
+        compare=False,
+    )
+    _http: httpx.Client | None = field(default=None, init=False, repr=False, compare=False)
+    _http_lock: threading.Lock = field(
+        default_factory=threading.Lock,
+        init=False,
+        repr=False,
+        compare=False,
+    )
+
+    @property
+    def last_usage(self) -> ApiUsageSnapshot | None:
+        """Uso da última chamada **desta thread**.
+
+        O cliente é partilhado entre workers concorrentes; guardar o último uso
+        num atributo de instância atribuiria os tokens de um item ao item de
+        outra thread. Armazenamento thread-local mantém a contabilidade correta.
+        """
+        return cast(ApiUsageSnapshot | None, getattr(self._usage_tls, "value", None))
+
+    @last_usage.setter
+    def last_usage(self, value: ApiUsageSnapshot | None) -> None:
+        self._usage_tls.value = value
+
+    def _http_client(self) -> httpx.Client:
+        """Cliente HTTP partilhado (keep-alive + pool).
+
+        Criar um ``httpx.Client`` por chamada custa um handshake TLS por request;
+        num corpus de 1000 itens com gerador + juiz isso é ~2000 handshakes. O
+        cliente do httpx é thread-safe, por isso pode ser partilhado pelos workers.
+        """
+        client = self._http
+        if client is not None and not client.is_closed:
+            return client
+        with self._http_lock:
+            client = self._http
+            if client is None or client.is_closed:
+                client = httpx.Client(
+                    timeout=self.timeout_seconds,
+                    limits=httpx.Limits(
+                        max_connections=self.max_connections,
+                        max_keepalive_connections=self.max_connections,
+                    ),
+                )
+                self._http = client
+            return client
+
+    def close(self) -> None:
+        """Fecha o pool HTTP. Idempotente."""
+        with self._http_lock:
+            if self._http is not None:
+                self._http.close()
+                self._http = None
 
     def _payload(
         self,
@@ -99,7 +260,7 @@ class OpenAiCompatibleClient:
         return code == 429 or 500 <= code < 600
 
     def complete(self, system: str, user: str, *, json_object: bool = False) -> str:
-        url = self.base_url.rstrip("/") + "/v1/chat/completions"
+        url = chat_completions_url(self.base_url)
         headers = {"Authorization": f"Bearer {self.api_key}"}
         payload = self._payload(system, user, json_object=json_object)
 
@@ -107,8 +268,7 @@ class OpenAiCompatibleClient:
         last_exc: Exception | None = None
         for i in range(attempts):
             try:
-                with httpx.Client(timeout=self.timeout_seconds) as client:
-                    r = client.post(url, headers=headers, json=payload)
+                r = self._http_client().post(url, headers=headers, json=payload)
             except httpx.RequestError as exc:
                 # Erro de transporte (DNS, TCP, timeout): considerar transitório
                 last_exc = exc
@@ -126,7 +286,8 @@ class OpenAiCompatibleClient:
                 self._sleep_backoff(i, status_code=r.status_code, response=r)
                 continue
 
-            r.raise_for_status()
+            if r.status_code >= 400:
+                raise _permanent_http_error(r)
             data = r.json()
             usage_raw = data.get("usage") if isinstance(data.get("usage"), dict) else {}
             pt = int(usage_raw.get("prompt_tokens") or 0)
@@ -149,20 +310,25 @@ class OpenAiCompatibleClient:
         *,
         status_code: int | None = None,
         response: httpx.Response | None = None,
-    ) -> float:
+    ) -> tuple[float, bool]:
+        """Devolve ``(atraso, veio_do_servidor)``.
+
+        O segundo elemento distingue um atraso escolhido por nós de uma directiva
+        ``Retry-After`` do servidor — só o primeiro pode receber jitter negativo.
+        """
         if status_code == 429 and response is not None:
             retry_after = response.headers.get("Retry-After")
             if retry_after:
                 try:
-                    return max(float(retry_after), 1.0)
+                    return max(float(retry_after), 1.0), True
                 except ValueError:
                     pass
             seq = self.rate_limit_backoff_seconds
-            return seq[i] if i < len(seq) else seq[-1]
+            return (seq[i] if i < len(seq) else seq[-1]), False
         seq = self.backoff_seconds
         if not seq:
-            return 0.0
-        return seq[i] if i < len(seq) else seq[-1]
+            return 0.0, False
+        return (seq[i] if i < len(seq) else seq[-1]), False
 
     def _sleep_backoff(
         self,
@@ -171,9 +337,21 @@ class OpenAiCompatibleClient:
         status_code: int | None = None,
         response: httpx.Response | None = None,
     ) -> None:
-        delay = self._retry_delay_seconds(i, status_code=status_code, response=response)
-        if delay > 0:
-            time.sleep(delay)
+        delay, from_server = self._retry_delay_seconds(
+            i,
+            status_code=status_code,
+            response=response,
+        )
+        if delay <= 0:
+            return
+        if from_server:
+            # ``Retry-After`` é uma directiva: nunca retomar antes do prazo. O jitter
+            # positivo continua a dessincronizar os workers sem violar o servidor.
+            time.sleep(delay * (1.0 + random.uniform(0.0, 0.2)))
+            return
+        # Jitter simétrico: com vários workers em retry, um backoff idêntico
+        # sincroniza as tentativas e reproduz o 429 (thundering herd).
+        time.sleep(delay * (1.0 + random.uniform(-0.2, 0.2)))
 
 
 def _max_retries_from_env(default: int = 4) -> int:
@@ -191,11 +369,22 @@ def resolve_models_from_env() -> tuple[str, str]:
     return llm_model, judge_model
 
 
+def pool_size_for_concurrency(concurrency: int) -> int:
+    """Ligações do pool para N workers: uma por worker, com folga e um mínimo sensato.
+
+    Um pool menor que a concorrência faz os workers excedentes bloquearem à espera
+    de uma ligação até ao ``timeout`` e depois falharem com ``PoolTimeout`` — que,
+    sendo um ``RequestError``, é retentado e mascara o erro de configuração.
+    """
+    return max(DEFAULT_MAX_CONNECTIONS, int(concurrency) + 4)
+
+
 def default_llm_from_env(
     *,
     timeout_seconds: float,
     temperature: float | None = None,
     max_tokens: int | None = None,
+    max_connections: int = DEFAULT_MAX_CONNECTIONS,
 ) -> LlmClient:
     """Cliente para o respondedor; respeita `cfg.generation` quando passado."""
     key = require_openai_api_key()
@@ -209,6 +398,7 @@ def default_llm_from_env(
         temperature=temperature,
         max_tokens=max_tokens,
         max_retries=_max_retries_from_env(),
+        max_connections=max_connections,
     )
 
 
@@ -217,10 +407,11 @@ def default_judge_from_env(
     timeout_seconds: float,
     temperature: float = 0.0,
     max_retries: int | None = None,
+    max_connections: int = DEFAULT_MAX_CONNECTIONS,
 ) -> LlmClient:
     """Cliente para o juiz; por padrão temperatura 0 (determinismo do veredito)."""
-    key = require_openai_api_key()
-    base = openai_base_url_from_env()
+    key = judge_api_key_from_env()
+    base = judge_base_url_from_env()
     _, model = resolve_models_from_env()
     retries = _max_retries_from_env() if max_retries is None else max_retries
     return OpenAiCompatibleClient(
@@ -230,6 +421,7 @@ def default_judge_from_env(
         timeout_seconds=timeout_seconds,
         temperature=temperature,
         max_retries=retries,
+        max_connections=max_connections,
     )
 
 

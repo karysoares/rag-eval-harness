@@ -7,7 +7,7 @@ from typing import Any
 import httpx
 import pytest
 
-from llm_evaluation.llm_client import OpenAiCompatibleClient
+from llm_evaluation.llm_client import OpenAiCompatibleClient, PermanentApiError
 
 
 def _client(**overrides: Any) -> OpenAiCompatibleClient:
@@ -42,6 +42,8 @@ def test_retries_then_succeeds_on_transient_error(monkeypatch: pytest.MonkeyPatc
     calls: list[int] = []
 
     class FakeClient:
+        is_closed = False
+
         def __init__(self, *a: Any, **kw: Any) -> None:  # noqa: ANN401
             pass
 
@@ -70,6 +72,8 @@ def test_gives_up_after_max_retries(monkeypatch: pytest.MonkeyPatch) -> None:
     calls: list[int] = []
 
     class AlwaysFail:
+        is_closed = False
+
         def __init__(self, *a: Any, **kw: Any) -> None:  # noqa: ANN401
             pass
 
@@ -95,6 +99,8 @@ def test_4xx_non_retriable_propagates_immediately(monkeypatch: pytest.MonkeyPatc
     calls: list[int] = []
 
     class Forbidden:
+        is_closed = False
+
         def __init__(self, *a: Any, **kw: Any) -> None:  # noqa: ANN401
             pass
 
@@ -111,7 +117,34 @@ def test_4xx_non_retriable_propagates_immediately(monkeypatch: pytest.MonkeyPatc
 
     monkeypatch.setattr(httpx, "Client", Forbidden)
     c = _client(max_retries=2)
-    with pytest.raises(httpx.HTTPStatusError):
+    with pytest.raises(PermanentApiError) as exc:
         c.complete("sys", "user")
     # 4xx não-transitório não deve retentar
     assert len(calls) == 1
+    # e a resposta do fornecedor tem de chegar ao utilizador
+    assert "403" in str(exc.value)
+    assert "forbidden" in str(exc.value)
+
+
+def test_erro_permanente_expoe_a_mensagem_json_do_fornecedor(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Ollama devolve ``model '...' not found`` num 404 — a causa real do erro."""
+
+    class NotFound:
+        is_closed = False
+
+        def __init__(self, *a: Any, **kw: Any) -> None:  # noqa: ANN401
+            pass
+
+        def post(self, url: str, headers: dict[str, str], json: dict[str, Any]) -> httpx.Response:
+            request = httpx.Request("POST", url)
+            return httpx.Response(
+                404,
+                request=request,
+                json={"error": {"message": "model 'qwen2.5:7b' not found"}},
+            )
+
+    monkeypatch.setattr(httpx, "Client", NotFound)
+    with pytest.raises(PermanentApiError, match="model 'qwen2.5:7b' not found"):
+        _client().complete("sys", "user")
