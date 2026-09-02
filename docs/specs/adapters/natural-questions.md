@@ -11,8 +11,15 @@ Carregar Natural Questions Open como dataset principal, com **dois modos de corr
 
 | Alias YAML | Repositório HF | Passagem | Config |
 |------------|----------------|----------|--------|
-| `nq_open` | `google-research-datasets/nq_open` | Não | [`configs/nq_open.yaml`](../../../configs/nq_open.yaml) |
-| `nq_open_gold` | `florin-hf/nq_open_gold` | `text` (Wikipedia gold) | [`configs/nq_open_rag.yaml`](../../../configs/nq_open_rag.yaml) |
+| `nq_open` | `google-research-datasets/nq_open` | Não | `configs/nq_open.yaml`* |
+| `nq_open_gold` | `florin-hf/nq_open_gold` | `text` (Wikipedia gold) | `configs/nq_open_rag.yaml`* |
+
+> **\* Configs não distribuídos.** O repositório público inclui apenas os configs do
+> caso de referência FairytaleQA pt-BR. Os configs `nq_open*.yaml` citados aqui
+> descrevem o protocolo com que o adaptador foi validado e servem de referência
+> para reconstruir um equivalente — o adaptador genérico (`adapters/hf_generic.py`)
+> continua a suportar Natural Questions. Ver `configs/default.yaml` como modelo.
+
 
 ## Entradas e saídas
 

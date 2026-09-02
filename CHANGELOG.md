@@ -11,6 +11,7 @@ Alterações relevantes do projeto, no formato [Keep a Changelog](https://keepac
 - `retrieval.CachingEmbedder`: memoriza embeddings por texto entre itens e entre recuperação e verificação (84,8% de acerto no cenário acima).
 - Documentação técnica publicada no repositório: `docs/ARCHITECTURE.md`, `docs/specs/`, `docs/decisions/`, `docs/techniques/`, `docs/metrics.md` (notas internas continuam locais).
 - Secções `Performance` e `Statistical methods` no `README.md`.
+- Evidência gravada do A/B de juízes em `docs/evidencia/judge_ab_fairytale_200.json` e o config que a reproduz (`configs/ptbr_fairytale_judge_ab.yaml`): quatro juízes sobre os mesmos 200 itens, com uso de tokens por modelo, testes emparelhados e limitações declaradas.
 
 - Meta-avaliação do juiz ([SPEC-010](docs/specs/010-judge-meta-evaluation.md)): `judge_meta.py` com calibração (ECE/MCE), concordância com a referência (confusão 2×2, κ de Cohen, IC de Wilson), sondas de viés de verbosidade (ponto-bisserial) e de posição (taxa de aprovação por rank do chunk ouro). CLI `llm-eval --judge-report RUN_DIR` grava `judge_report.json` sem API.
 - `scripts/judge_self_consistency.py`: N vereditos repetidos por item para medir estabilidade do juiz; agregado por `judge_meta.self_consistency` (κ de Fleiss, taxa de unanimidade) e ligado via `--judge-samples`.
@@ -33,6 +34,11 @@ Alterações relevantes do projeto, no formato [Keep a Changelog](https://keepac
 
 ### Fixed
 
+- Custo por modelo: um par único de preços aplicado a gerador e juiz distintos errou por **9,7×** numa corrida gravada ($0,17 reportado contra $1,69 real). `meta.observabilidade` reparte tokens por modelo e `LLM_EVAL_PRICES` dá custo por modelo; modelos sem preço são listados em vez de desaparecerem do total. O parser passa a separar pela direita, para aceitar etiquetas do Ollama (`qwen2.5:7b`).
+- Falhas de execução deixam de contaminar a estatística emparelhada. `_failed_record` marca `flag_anomalia` para revisão, o que fazia uma corrida com 9 falhas de quota aparecer com anomalias "exclusivas": o McNemar dava p=0,004 a medir propagação de faturação. Excluídas, todos os pares dão p=1.
+- `insufficient_quota` chega como 429 mas nunca recupera: passa a falhar à primeira citando a mensagem do fornecedor, em vez de 3 tentativas com 30 s de backoff.
+- Modelos que só aceitam a temperatura por omissão (ex.: `gpt-5-mini`) rejeitavam o `temperature=0` do juiz e caíam 100% no fallback heurístico — que responde `sustentado`, fazendo um juiz avariado parecer permissivo. O cliente repete sem o parâmetro e assinala `temperature_rejected`.
+- Cinco links quebrados nos documentos publicados (dois caminhos relativos errados, três para configs `nq_open` removidos).
 - Endpoint de chat deixa de duplicar `/v1`: bases já terminadas em `/v1` (Ollama, vLLM, OpenRouter, DashScope) davam `/v1/v1/chat/completions` e um 404 — na prática, nenhum fornecedor não-OpenAI funcionava apesar de o README o anunciar.
 - `Retry-After` do servidor deixa de poder ser encurtado: o jitter simétrico aplica-se só ao backoff interno; a directiva do servidor recebe apenas jitter positivo.
 - Corrida concorrente passa a ser interrompível: a submissão usa uma janela deslizante e o pool é fechado com `cancel_futures`, em vez de esperar por todos os itens já enfileirados no `Ctrl+C`.

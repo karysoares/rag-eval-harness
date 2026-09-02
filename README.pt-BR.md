@@ -147,7 +147,15 @@ Interface local sobre `outputs/run_*` — KPI, inspector Q/A, calibração, padr
 
 Qualquer endpoint compatível com OpenAI serve, e **o juiz pode correr num fornecedor diferente do gerador** — basta `JUDGE_BASE_URL` (e `JUDGE_API_KEY`) além de `OPENAI_BASE_URL`. A base pode ou não terminar em `/v1`; ambas as formas resolvem.
 
-A separação importa por duas razões. O juiz domina o custo: pela contabilidade de tokens de `ptbr_fairytale_full.yaml` (1025 itens, `top_k=4`, `chunk_max_chars=500`, `max_tokens=128`, duas chamadas por item), um juiz `gpt-4o` dá cerca de $2,80 de uma corrida de ~$3,15, contra ~$0,35 do gerador `gpt-4o-mini` — estimativa a partir desses parâmetros e dos preços de tabela, não de uma corrida gravada — por isso passá-lo para local elimina a maior parte da despesa. E um juiz de família diferente do gerador é metodologicamente mais forte: um modelo que avalia as suas próprias respostas tende a preferi-las. A corrida regista ambos os endpoints em `summary.json` → `protocolo_ativo.models`.
+A separação importa por duas razões. O juiz domina o custo. Medido numa corrida gravada de 200 itens (gerador `gpt-4o-mini`, juiz `gpt-4o`, 380 chamadas):
+
+| modelo | papel | chamadas | tokens prompt | completion | custo |
+|---|---|---|---|---|---|
+| `gpt-4o` | juiz | 189 | 571 437 | 18 143 | **$1,61** |
+| `gpt-4o-mini` | gerador | 191 | 481 455 | 8 218 | $0,08 |
+
+O juiz é 95% da fatura, e uma corrida completa de 1025 itens extrapola para ~$8,65. Passá-lo para local elimina quase tudo. A segunda razão é metodológica: um juiz de família diferente do gerador é mais forte, já que um modelo que avalia as suas próprias respostas tende a preferi-las.
+A contabilidade de custo é **por modelo**: um par único de preços aplicado a um setup misto subestimou a corrida acima em 9,7× ($0,17 reportado contra $1,69 real). Defina `LLM_EVAL_PRICES=gpt-4o-mini:0.15:0.60,gpt-4o:2.50:10.00` e o `summary.json` passa a trazer `observabilidade.custo` repartido por modelo, assinalando qualquer modelo sem preço configurado em vez de o omitir do total em silêncio. E um juiz de família diferente do gerador é metodologicamente mais forte: um modelo que avalia as suas próprias respostas tende a preferi-las. A corrida regista ambos os endpoints em `summary.json` → `protocolo_ativo.models`.
 
 ```bash
 # Gerador em API paga, juiz local e gratuito
@@ -168,18 +176,22 @@ uv run llm-eval --judge-report outputs/run_<id>
 
 Presets para Ollama, vLLM, DeepSeek, DashScope e OpenRouter em [`.env.example`](.env.example).
 
-**Escolha o juiz com o harness, não por intuição.** Smoke rápido sobre três casos pt-BR com veredito conhecido, usando o prompt e o validador do próprio repo:
+**Escolha o juiz com o harness, não por intuição.** Quatro juízes sobre os mesmos 200 itens (`configs/ptbr_fairytale_judge_ab.yaml`, mesmo gerador, emparelhados por `id_item`):
 
-| modelo (Ollama, M3 16 GB) | JSON válido | veredito certo | latência |
-|---|---|---|---|
-| `qwen2.5:7b` | 3/3 | 3/3 | 50 s |
-| `deepseek-r1:8b` | 3/3 | 2/3 | 19 s |
-| `llama3.1:8b` | 3/3 | 2/3 | 40 s |
-| `qwen2.5:3b` | 3/3 | 2/3 | 6 s |
-| `phi3.5:3.8b` | 2/3 | 1/3 | 59 s |
-| `mistral:7b` | 0/3 | 0/3 | 31 s |
+| juiz | n | exatidão | κ | ECE | conf. média | `sustentado` | s/item |
+|---|---|---|---|---|---|---|---|
+| `gpt-4o` | 189 | 0,561 | −0,028 | 0,421 | 0,982 | 86,2% | 11,7 |
+| `gpt-4o-mini` | 200 | 0,575 | −0,006 | 0,399 | 0,974 | 78,0% | 3,0 |
+| **`gpt-5.4-nano`** | 200 | **0,610** | 0,092 | **0,296** | 0,906 | 76,5% | **2,5** |
+| `qwen2.5` (Ollama) | 200 | 0,585 | **0,190** | 0,366 | 0,911 | 59,5% | 33,7 |
 
-Três casos são um filtro, não evidência. Duas falhas que expõem valem a pena: o `qwen2.5:3b` faz 2/3 respondendo `nao_sustentado` a tudo — um juiz degenerado parece competente num teste curto — e o `mistral:7b` nunca devolve o schema, pelo que todos os vereditos são o fallback heurístico, que por omissão diz `sustentado`. Ambos são apanhados por `--judge-report` (distribuição de vereditos colapsada, κ perto de zero) e pela exclusão de fallbacks descrita abaixo. Corra-o antes de confiar em qualquer juiz.
+Nenhum par difere significativamente na taxa de alerta (todos p=1 depois de excluir falhas de execução). As colunas leem-se em separado: exatidão e κ são medidos contra uma referência *léxica*, que faz uma pergunta diferente da do juiz, por isso κ perto de zero significa que os dois sinais são independentes e não que o juiz erra. A calibração é inequívoca — todos declaram confiança de 0,91–0,98 acertando 56–61%, portanto `confianca` não serve de limiar de triagem.
+
+O modelo caro não é o bom: o `gpt-4o` fica último em todas as colunas e custa 9,3× o `gpt-4o-mini`. O juiz local mantém o κ mais alto e a menor taxa de aprovação, a custo zero e com 13× a latência.
+
+Agregados completos, com uso de tokens por modelo e os testes emparelhados: [`docs/evidencia/judge_ab_fairytale_200.json`](docs/evidencia/judge_ab_fairytale_200.json).
+
+Dois modos de falha que esta tabela expõe, ambos silenciosos sem `--judge-report`: um modelo pequeno que aprova tudo pontua bem num teste curto (o `qwen2.5:3b` respondeu `nao_sustentado` aos três casos do smoke), e um modelo que nunca devolve o schema cai no fallback heurístico, que por omissão diz `sustentado` (`mistral:7b`, e o `gpt-5-mini` antes de o cliente aprender a repetir sem um `temperature` não suportado).
 
 Erros de configuração falham já e citam o fornecedor: um nome de modelo errado aparece como `HTTP 404 … model 'qwen2.5:7b' not found` à primeira tentativa, em vez de três repetições silenciosas.
 

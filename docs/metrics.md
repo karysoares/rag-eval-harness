@@ -38,7 +38,7 @@ Um item marca `flag_anomalia` / `anomaly_flag=True` quando a **política de agre
 | `todos_criticos` | AND entre camadas activas; nenhuma activa → false |
 | `embedding_e_juiz` | Com embedding+juiz: `e ∧ j`; senão degrada para a camada activa (ver spec) |
 
-Gatilhos: **g** = `gold_incorreto`; **e** = `embedding_baixo_suporte`; **j** = veredito negativo **sem** `fallback_heuristico` ([`veredito.py`](src/llm_evaluation/veredito.py)). Valores `null`/`false` não disparam.
+Gatilhos: **g** = `gold_incorreto`; **e** = `embedding_baixo_suporte`; **j** = veredito negativo **sem** `fallback_heuristico` ([`veredito.py`](../src/llm_evaluation/veredito.py)). Valores `null`/`false` não disparam.
 
 Camadas (ligáveis em YAML):
 

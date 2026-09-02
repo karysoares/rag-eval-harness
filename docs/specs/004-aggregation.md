@@ -66,7 +66,7 @@ Função interna `_layer_triggers` → `(g, e, j)`:
 
 1. Se `signals.judge is None` → **j = false**.
 2. Se `judge.raw["fallback_heuristico"]` → **j = false** (mesmo que `juiz_negativo` esteja gravado no JSONL).
-3. Caso contrário → `veredito_e_negativo(judge.veredito, negative_judge_verdicts)` ([`veredito.py`](../src/llm_evaluation/veredito.py)).
+3. Caso contrário → `veredito_e_negativo(judge.veredito, negative_judge_verdicts)` ([`veredito.py`](../../src/llm_evaluation/veredito.py)).
 
 **Null / ausente (não disparam):**
 
@@ -120,7 +120,7 @@ return checks não vazio AND all(checks)
 
 ### `embedding_e_juiz`
 
-Desenhada para RAG ([`configs/nq_open_rag.yaml`](../../configs/nq_open_rag.yaml)): reduz FP só-embedding quando juiz sustenta a resposta.
+Desenhada para RAG (calibrada originalmente em `nq_open_rag.yaml`, ver nota abaixo): reduz FP só-embedding quando juiz sustenta a resposta.
 
 **Fórmula (ordem no código):**
 

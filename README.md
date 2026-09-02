@@ -151,7 +151,15 @@ A local interface over `outputs/run_*` — KPIs, Q/A inspector, calibration, pat
 
 Any OpenAI-compatible endpoint works, and **the judge can run on a different provider from the generator** — set `JUDGE_BASE_URL` (and `JUDGE_API_KEY`) alongside `OPENAI_BASE_URL`. The base URL may or may not end in `/v1`; both forms resolve.
 
-That split matters for two reasons. The judge dominates cost: on the token accounting for `ptbr_fairytale_full.yaml` (1025 items, `top_k=4`, `chunk_max_chars=500`, `max_tokens=128`, two calls per item), a `gpt-4o` judge works out at roughly $2.80 of a ~$3.15 run against ~$0.35 for the `gpt-4o-mini` generator — an estimate from those parameters and list prices, not from a recorded run — so moving the judge to a local model removes most of the spend. And a judge from a different family than the generator is methodologically stronger: a model grading its own output tends to prefer it. The run records both endpoints in `summary.json` → `protocolo_ativo.models`.
+That split matters for two reasons. The judge dominates cost. Measured on a recorded 200-item run (`gpt-4o-mini` generator, `gpt-4o` judge, 380 calls):
+
+| model | role | calls | prompt tokens | completion | cost |
+|---|---|---|---|---|---|
+| `gpt-4o` | judge | 189 | 571,437 | 18,143 | **$1.61** |
+| `gpt-4o-mini` | generator | 191 | 481,455 | 8,218 | $0.08 |
+
+The judge is 95% of the bill, and a full 1025-item run extrapolates to ~$8.65. Moving the judge to a local model removes almost all of it. The second reason is methodological: a judge from a different family than the generator is stronger, since a model grading its own output tends to prefer it.
+Cost accounting is **per model**: a single price pair applied to a mixed generator/judge setup understated the run above by 9.7× ($0.17 reported against $1.69 actual). Set `LLM_EVAL_PRICES=gpt-4o-mini:0.15:0.60,gpt-4o:2.50:10.00` and `summary.json` carries `observabilidade.custo` broken down by model, flagging any model with no configured price rather than silently omitting it from the total. And a judge from a different family than the generator is methodologically stronger: a model grading its own output tends to prefer it. The run records both endpoints in `summary.json` → `protocolo_ativo.models`.
 
 ```bash
 # Generator on a paid API, judge free and local
@@ -172,18 +180,22 @@ uv run llm-eval --judge-report outputs/run_<id>
 
 Presets for Ollama, vLLM, DeepSeek, DashScope and OpenRouter are in [`.env.example`](.env.example).
 
-**Choose a judge with the harness, not with intuition.** A quick smoke over three pt-BR cases with known verdicts, using the repo's own prompt and validator:
+**Choose a judge with the harness, not with intuition.** Four judges over the same 200 items (`configs/ptbr_fairytale_judge_ab.yaml`, same generator, paired by `id_item`):
 
-| model (Ollama, M3 16 GB) | valid JSON | correct verdict | latency |
-|---|---|---|---|
-| `qwen2.5:7b` | 3/3 | 3/3 | 50 s |
-| `deepseek-r1:8b` | 3/3 | 2/3 | 19 s |
-| `llama3.1:8b` | 3/3 | 2/3 | 40 s |
-| `qwen2.5:3b` | 3/3 | 2/3 | 6 s |
-| `phi3.5:3.8b` | 2/3 | 1/3 | 59 s |
-| `mistral:7b` | 0/3 | 0/3 | 31 s |
+| judge | n | accuracy | κ | ECE | mean conf. | `sustentado` | s/item |
+|---|---|---|---|---|---|---|---|
+| `gpt-4o` | 189 | 0.561 | −0.028 | 0.421 | 0.982 | 86.2% | 11.7 |
+| `gpt-4o-mini` | 200 | 0.575 | −0.006 | 0.399 | 0.974 | 78.0% | 3.0 |
+| **`gpt-5.4-nano`** | 200 | **0.610** | 0.092 | **0.296** | 0.906 | 76.5% | **2.5** |
+| `qwen2.5` (Ollama) | 200 | 0.585 | **0.190** | 0.366 | 0.911 | 59.5% | 33.7 |
 
-Three cases are a filter, not evidence. Two failures they do expose are worth knowing: `qwen2.5:3b` scores 2/3 by answering `nao_sustentado` to everything — a degenerate judge looks competent on a short test — and `mistral:7b` never returns the schema, so every verdict is the heuristic fallback, which defaults to `sustentado`. Both are caught by `--judge-report` (collapsed verdict distribution, κ near zero) and by the fallback exclusion described below. Run it before trusting any judge.
+No pair differs significantly on alert rate (all p=1 after excluding execution failures). Read the columns separately: accuracy and κ are measured against a *lexical* reference, which asks a different question than the judge does, so κ near zero means the two signals are independent rather than that the judge is wrong. Calibration is unambiguous — every judge declares 0.91–0.98 confidence while being right 56–61% of the time, so `confianca` is not usable as a triage threshold.
+
+The costly model is not the good one: `gpt-4o` is last on every column and 9.3× the price of `gpt-4o-mini`. The local judge keeps the highest κ and the lowest approval rate, at zero cost and 13× the latency.
+
+Full aggregates, including per-model token usage and the paired tests: [`docs/evidencia/judge_ab_fairytale_200.json`](docs/evidencia/judge_ab_fairytale_200.json).
+
+Two failure modes this table exposes, both silent without `--judge-report`: a small model that approves everything scores well on a short test (`qwen2.5:3b` answered `nao_sustentado` to all three smoke cases), and a model that never returns the schema falls back to the heuristic, which defaults to `sustentado` (`mistral:7b`, and `gpt-5-mini` before the client learned to retry without an unsupported `temperature`).
 
 Misconfiguration fails fast and quotes the provider: a wrong model name surfaces as `HTTP 404 … model 'qwen2.5:7b' not found` on the first attempt rather than after three silent retries.
 
