@@ -8,8 +8,13 @@ from __future__ import annotations
 
 import os
 import sys
+import threading
 import time
+from collections import deque
 from collections.abc import Callable
+from concurrent.futures import Future, ThreadPoolExecutor
+from contextlib import suppress
+from pathlib import Path
 from typing import Any
 
 from llm_evaluation.config import AppConfig
@@ -19,15 +24,31 @@ from llm_evaluation.generation import generate_answer
 from llm_evaluation.lexical_metrics import attach_lexical_to_meta
 from llm_evaluation.llm_client import (
     LlmClient,
+    PermanentApiError,
     default_judge_from_env,
     default_llm_from_env,
+    endpoint_host,
+    judge_base_url_from_env,
+    openai_base_url_from_env,
+    pool_size_for_concurrency,
     resolve_models_from_env,
 )
-from llm_evaluation.observability import TrackingLlmClient, UsageAccumulator
+from llm_evaluation.observability import (
+    LlmCallUsage,
+    TrackingLlmClient,
+    UsageAccumulator,
+    summarize_run_observability,
+)
 from llm_evaluation.pattern_detection import compute_diagnostico
 from llm_evaluation.retrieval import Embedder, Retriever, make_embedder
 from llm_evaluation.retrieval_hints import format_retrieval_hints
 from llm_evaluation.retrieval_metrics import compute_retrieval_metrics
+from llm_evaluation.telemetry import TelemetryExporter, build_exporter
+from llm_evaluation.telemetry.emit import (
+    emit_item_event,
+    emit_run_event,
+    telemetry_includes_content,
+)
 from llm_evaluation.types import EvalItem, RetrievedChunk, RunRecord, VerificationSignals
 from llm_evaluation.veredito import veredito_e_negativo
 from llm_evaluation.verification.aggregate import anomaly_from_signals
@@ -298,7 +319,9 @@ def _run_one_with_resources(
     judge_client: LlmClient,
     usage_acc: UsageAccumulator | None = None,
     critic_hook: CriticHook | None = None,
+    exporter: TelemetryExporter | None = None,
 ) -> RunRecord:
+    item_started_at = time.time()
     chunks = build_chunks_for_item(item, cfg.rag.chunk_max_chars) if cfg.rag.enabled else []
     retriever = Retriever(embedder, chunks)
     retrieved = (
@@ -366,9 +389,10 @@ def _run_one_with_resources(
     if judge_meta is not None:
         meta["contexto_juiz"] = judge_meta
     attach_lexical_to_meta(meta, cfg, item, answer)
+    chamadas_item: list[LlmCallUsage] = []
     if usage_acc is not None:
         meta["observabilidade"] = usage_acc.snapshot_for_item()
-        usage_acc.reset()
+        chamadas_item = usage_acc.drain()
     meta["diagnostico"] = compute_diagnostico(
         item=item,
         answer=answer,
@@ -392,7 +416,7 @@ def _run_one_with_resources(
     )
     meta["explicacao"] = build_explicacao(rec_stub, cfg=cfg)
 
-    return RunRecord(
+    registo = RunRecord(
         item_id=item.id,
         question=item.question,
         answer=answer,
@@ -403,6 +427,17 @@ def _run_one_with_resources(
         baseline_profile=baseline_profile,
         meta=meta,
     )
+    if exporter is not None:
+        # As chamadas vão para o evento, não para ``meta``: os artefactos da
+        # corrida têm de ser idênticos com e sem telemetria.
+        emit_item_event(
+            exporter,
+            registo,
+            calls=chamadas_item,
+            started_at=item_started_at,
+            include_content=telemetry_includes_content(),
+        )
+    return registo
 
 
 def _failed_record(
@@ -445,98 +480,307 @@ def _failed_record(
     )
 
 
+def inter_item_pause_seconds() -> float:
+    """Pausa de pacing entre itens (``LLM_EVAL_INTER_ITEM_SLEEP``); 0 = desligada."""
+    try:
+        return max(0.0, float(os.environ.get("LLM_EVAL_INTER_ITEM_SLEEP", "0") or "0"))
+    except ValueError:
+        return 0.0
+
+
+class _Pacer:
+    """Espaça o arranque dos itens em pelo menos ``pause`` segundos, entre threads.
+
+    ``LLM_EVAL_INTER_ITEM_SLEEP`` existe para respeitar limites de taxa. Aplicá-lo
+    só no caminho sequencial faria a pacing desaparecer ao subir a concorrência —
+    exactamente quando é mais necessária. O relógio é partilhado por todos os
+    workers, por isso a taxa agregada mantém-se em 1/``pause`` itens por segundo
+    independentemente do número de workers.
+    """
+
+    def __init__(self, pause: float) -> None:
+        self._pause = pause
+        self._lock = threading.Lock()
+        self._next_slot = 0.0
+
+    def wait(self) -> None:
+        if self._pause <= 0:
+            return
+        with self._lock:
+            now = time.monotonic()
+            slot = max(now, self._next_slot)
+            self._next_slot = slot + self._pause
+        delay = slot - time.monotonic()
+        if delay > 0:
+            time.sleep(delay)
+
+
+def resolve_concurrency(cfg: AppConfig) -> int:
+    """Workers de itens: ``LLM_EVAL_CONCURRENCY`` sobrepõe-se a ``llm.concurrency``."""
+    raw = os.environ.get("LLM_EVAL_CONCURRENCY", "").strip()
+    if raw:
+        try:
+            return max(1, int(raw))
+        except ValueError:
+            pass
+    return max(1, cfg.llm.concurrency)
+
+
+def _run_item_with_retries(
+    cfg: AppConfig,
+    item: EvalItem,
+    *,
+    position: int,
+    total: int,
+    baseline_profile: str,
+    embedder: Embedder,
+    llm: LlmClient,
+    judge_client: LlmClient,
+    usage_acc: UsageAccumulator,
+    critic_hook: CriticHook | None,
+    attempts: int,
+    exporter: TelemetryExporter | None = None,
+) -> RunRecord:
+    """Processa um item com retries; devolve sempre um registo (falha vira `_failed_record`)."""
+    last_err: Exception | None = None
+    for at in range(1, attempts + 1):
+        try:
+            return _run_one_with_resources(
+                cfg,
+                item,
+                baseline_profile=baseline_profile,
+                embedder=embedder,
+                llm=llm,
+                judge_client=judge_client,
+                usage_acc=usage_acc,
+                critic_hook=critic_hook,
+                exporter=exporter,
+            )
+        except PermanentApiError as e:
+            # Modelo inexistente, chave inválida, payload rejeitado: repetir só
+            # atrasa a falha e esconde a causa. Falha já, com a mensagem do fornecedor.
+            print(
+                f"[{position}/{total}] erro de configuração no item {item.id}: {e}",
+                file=sys.stderr,
+                flush=True,
+            )
+            last_err = e
+            break
+        except Exception as e:  # noqa: BLE001 - robustez de produção por item
+            last_err = e
+            if at < attempts:
+                back = _item_retry_backoff_seconds(e, at)
+                print(
+                    f"[{position}/{total}] erro no item {item.id} (tentativa {at}/{attempts}): "
+                    f"{e}; retry em {back:.1f}s",
+                    file=sys.stderr,
+                    flush=True,
+                )
+                time.sleep(back)
+                continue
+            print(
+                f"[{position}/{total}] falha permanente no item {item.id}: {e}",
+                file=sys.stderr,
+                flush=True,
+            )
+    assert last_err is not None
+    return _failed_record(
+        item,
+        baseline_profile=baseline_profile,
+        orchestration=cfg.orchestration,
+        err=last_err,
+        attempt=attempts,
+    )
+
+
+def _print_progress(i: int, n: int, t0: float) -> None:
+    if i == 1 or i == n or i % PROGRESS_EVERY == 0:
+        elapsed = time.time() - t0
+        rate = i / elapsed if elapsed > 0 else 0.0
+        print(
+            f"[{i}/{n}] processado (média {rate:.2f} itens/s, decorrido {elapsed:.1f}s)",
+            file=sys.stderr,
+            flush=True,
+        )
+
+
+def _close_quietly(client: object) -> None:
+    close = getattr(client, "close", None)
+    if callable(close):
+        with suppress(Exception):
+            close()
+
+
 def run_batch(
     cfg: AppConfig,
     items: list[EvalItem],
     *,
     on_record: Callable[[RunRecord], None] | None = None,
     critic_hook: CriticHook | None = None,
+    run_dir: Path | None = None,
+    config_name: str = "",
 ) -> list[RunRecord]:
     """Corre todos os itens reaproveitando embedder e clientes; imprime progresso.
 
     Se ``on_record`` for passado, é invocado a cada registo concluído — ideal
     para escrita incremental de ``predictions.jsonl`` (resiliência a falhas).
+
+    Com ``llm.concurrency > 1`` (ou ``LLM_EVAL_CONCURRENCY``) os itens são
+    processados por um pool de threads: o trabalho é dominado por latência de
+    rede, não por CPU. Cada item é independente, e ``on_record`` continua a ser
+    chamado **pela ordem do dataset**, numa única thread — a ordem e o conteúdo
+    de ``predictions.jsonl`` não dependem da concorrência.
+
+    Com ``LLM_EVAL_TELEMETRY`` definido, emite traces/métricas por item e por
+    corrida para os destinos pedidos (Phoenix, LangSmith, CloudWatch, JSONL). A
+    telemetria é um canal lateral: os artefactos gravados são idênticos com e sem
+    ela, e um destino em baixo produz um aviso, não uma falha.
     """
     profile = cfg.baselines.profile
-    embedder = make_embedder(cfg.embeddings.backend, cfg.embeddings.model_name)
+    embedder = make_embedder(cfg.embeddings.backend, cfg.embeddings.model_name, cache=True)
     gen_model, judge_model = resolve_models_from_env()
     usage_acc = UsageAccumulator()
-    llm = TrackingLlmClient(
-        default_llm_from_env(
-            timeout_seconds=cfg.llm.timeout_seconds,
-            temperature=cfg.generation.temperature,
-            max_tokens=cfg.generation.max_tokens,
-        ),
-        usage_acc,
-        role="generation",
-        model=gen_model,
-    )
-    judge_client = TrackingLlmClient(
-        default_judge_from_env(timeout_seconds=cfg.llm.timeout_seconds),
-        usage_acc,
-        role="judge",
-        model=judge_model,
-    )
+    exporter = build_exporter(run_dir=run_dir)
+    run_started_at = time.time()
 
-    out: list[RunRecord] = []
     n = len(items)
     t0 = time.time()
     attempts = max(1, int(os.environ.get("LLM_EVAL_ITEM_RETRIES", ITEM_RETRY_ATTEMPTS)))
+    workers = min(resolve_concurrency(cfg), n) if n else 1
+    pool_size = pool_size_for_concurrency(workers)
+    pacer = _Pacer(inter_item_pause_seconds())
+
+    gen_inner = default_llm_from_env(
+        timeout_seconds=cfg.llm.timeout_seconds,
+        temperature=cfg.generation.temperature,
+        max_tokens=cfg.generation.max_tokens,
+        max_connections=pool_size,
+    )
+    judge_inner = default_judge_from_env(
+        timeout_seconds=cfg.llm.timeout_seconds,
+        max_connections=pool_size,
+    )
+    llm = TrackingLlmClient(
+        gen_inner,
+        usage_acc,
+        role="generation",
+        model=gen_model,
+        endpoint=endpoint_host(openai_base_url_from_env()),
+    )
+    judge_client = TrackingLlmClient(
+        judge_inner,
+        usage_acc,
+        role="judge",
+        model=judge_model,
+        endpoint=endpoint_host(judge_base_url_from_env()),
+    )
+
+    def process(position: int, item: EvalItem) -> RunRecord:
+        # No modo concorrente o pacer é o único ponto de espaçamento; no sequencial
+        # a pausa é aplicada entre itens (mesma taxa agregada, ver _Pacer).
+        if workers > 1:
+            pacer.wait()
+        return _run_item_with_retries(
+            cfg,
+            item,
+            position=position,
+            total=n,
+            baseline_profile=profile,
+            embedder=embedder,
+            llm=llm,
+            judge_client=judge_client,
+            usage_acc=usage_acc,
+            critic_hook=critic_hook,
+            attempts=attempts,
+            exporter=exporter,
+        )
+
+    try:
+        if workers > 1:
+            out = _run_batch_concurrent(items, process, on_record=on_record, workers=workers, t0=t0)
+        else:
+            out = _run_batch_sequential(items, process, on_record=on_record, t0=t0)
+    finally:
+        _close_quietly(gen_inner)
+        _close_quietly(judge_inner)
+    emit_run_event(
+        exporter,
+        run_id=run_dir.name if run_dir is not None else "sem_run_dir",
+        started_at=run_started_at,
+        records=out,
+        config_name=config_name,
+        totals=summarize_run_observability(out) or {},
+    )
+    _close_quietly(exporter)
+    stats = getattr(embedder, "stats", None)
+    if callable(stats):
+        print(f"Embeddings: {stats()}", file=sys.stderr, flush=True)
+    return out
+
+
+def _run_batch_sequential(
+    items: list[EvalItem],
+    process: Callable[[int, EvalItem], RunRecord],
+    *,
+    on_record: Callable[[RunRecord], None] | None,
+    t0: float,
+) -> list[RunRecord]:
+    out: list[RunRecord] = []
+    n = len(items)
+    pause = inter_item_pause_seconds()
     for i, item in enumerate(items, start=1):
-        rec: RunRecord | None = None
-        last_err: Exception | None = None
-        for at in range(1, attempts + 1):
-            try:
-                rec = _run_one_with_resources(
-                    cfg,
-                    item,
-                    baseline_profile=profile,
-                    embedder=embedder,
-                    llm=llm,
-                    judge_client=judge_client,
-                    usage_acc=usage_acc,
-                    critic_hook=critic_hook,
-                )
-                break
-            except Exception as e:  # noqa: BLE001 - robustez de produção por item
-                last_err = e
-                if at < attempts:
-                    back = _item_retry_backoff_seconds(e, at)
-                    print(
-                        f"[{i}/{n}] erro no item {item.id} (tentativa {at}/{attempts}): {e}; "
-                        f"retry em {back:.1f}s",
-                        file=sys.stderr,
-                        flush=True,
-                    )
-                    time.sleep(back)
-                    continue
-                print(
-                    f"[{i}/{n}] falha permanente no item {item.id}: {e}",
-                    file=sys.stderr,
-                    flush=True,
-                )
-        if rec is None:
-            assert last_err is not None
-            rec = _failed_record(
-                item,
-                baseline_profile=profile,
-                orchestration=cfg.orchestration,
-                err=last_err,
-                attempt=attempts,
-            )
+        rec = process(i, item)
         out.append(rec)
         if on_record is not None:
             on_record(rec)
-        if i == 1 or i == n or i % PROGRESS_EVERY == 0:
-            elapsed = time.time() - t0
-            rate = i / elapsed if elapsed > 0 else 0.0
-            print(
-                f"[{i}/{n}] processado (média {rate:.2f} itens/s, decorrido {elapsed:.1f}s)",
-                file=sys.stderr,
-                flush=True,
-            )
-        if i < n:
-            pause = float(os.environ.get("LLM_EVAL_INTER_ITEM_SLEEP", "0") or "0")
-            if pause > 0:
-                time.sleep(pause)
+        _print_progress(i, n, t0)
+        if i < n and pause > 0:
+            time.sleep(pause)
+    return out
+
+
+def _run_batch_concurrent(
+    items: list[EvalItem],
+    process: Callable[[int, EvalItem], RunRecord],
+    *,
+    on_record: Callable[[RunRecord], None] | None,
+    workers: int,
+    t0: float,
+) -> list[RunRecord]:
+    """Processa itens em paralelo, entregando os registos pela ordem do dataset.
+
+    Os futuros são consumidos por ordem de submissão (não de conclusão), de modo
+    que ``on_record`` — que escreve em ``predictions.jsonl`` — é sempre chamado
+    numa única thread e com a mesma ordem do modo sequencial.
+
+    A submissão é limitada a uma janela deslizante em vez de enfileirar a corrida
+    inteira: em ``Ctrl+C`` (ou qualquer excepção) só há um punhado de itens por
+    cancelar, e ``shutdown(cancel_futures=True)`` termina a corrida em segundos
+    em vez de esperar pelos milhares de itens já submetidos.
+    """
+    n = len(items)
+    out: list[RunRecord] = []
+    window = max(2 * workers, workers + 1)
+    pending: deque[Future[RunRecord]] = deque()
+    pool = ThreadPoolExecutor(max_workers=workers, thread_name_prefix="llm-eval")
+    interrupted = False
+    try:
+        cursor = 0
+        for i in range(1, n + 1):
+            while cursor < n and len(pending) < window:
+                cursor += 1
+                pending.append(pool.submit(process, cursor, items[cursor - 1]))
+            rec = pending.popleft().result()
+            out.append(rec)
+            if on_record is not None:
+                on_record(rec)
+            _print_progress(i, n, t0)
+    except BaseException:
+        interrupted = True
+        raise
+    finally:
+        # ``cancel_futures`` descarta o que ainda não arrancou; ``wait=False`` evita
+        # bloquear o Ctrl+C atrás dos itens em voo (as linhas já escritas em
+        # predictions.jsonl permitem retomar com --resume).
+        pool.shutdown(wait=not interrupted, cancel_futures=interrupted)
     return out

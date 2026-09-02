@@ -6,6 +6,7 @@ A crítica é sinal diagnóstico em ``meta``; não entra na agregação de ``fla
 from __future__ import annotations
 
 from collections.abc import Callable
+from pathlib import Path
 from typing import Any
 
 from llm_evaluation.config import AppConfig
@@ -86,5 +87,14 @@ def run_items(
     items: list[EvalItem],
     *,
     on_record: Callable[[RunRecord], None] | None = None,
+    run_dir: Path | None = None,
+    config_name: str = "",
 ) -> list[RunRecord]:
-    return run_batch(cfg, items, on_record=on_record, critic_hook=_critic_hook)
+    return run_batch(
+        cfg,
+        items,
+        on_record=on_record,
+        critic_hook=_critic_hook,
+        run_dir=run_dir,
+        config_name=config_name,
+    )

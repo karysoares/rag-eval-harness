@@ -8,7 +8,7 @@ import os
 import sys
 from collections.abc import Callable
 from pathlib import Path
-from typing import TextIO, cast
+from typing import Any, TextIO, cast
 
 from dotenv import load_dotenv
 
@@ -25,6 +25,7 @@ from llm_evaluation.evaluation_metrics import (
     compare_metric_reports,
     load_full_report,
     load_records_from_predictions_jsonl,
+    load_run_flags,
 )
 from llm_evaluation.llm_client import MissingApiKeyError, require_openai_api_key
 from llm_evaluation.orchestration import multi, single
@@ -139,6 +140,26 @@ def main() -> None:
         ),
     )
     parser.add_argument(
+        "--judge-report",
+        type=Path,
+        metavar="RUN_DIR",
+        default=None,
+        help=(
+            "Meta-avaliação do juiz sobre outputs/run_* (calibração, concordância, "
+            "viés de verbosidade/posição); grava judge_report.json — sem API"
+        ),
+    )
+    parser.add_argument(
+        "--judge-samples",
+        type=Path,
+        metavar="JSONL",
+        default=None,
+        help=(
+            "JSONL de autoconsistência ({id_item, vereditos: [...]}) produzido por "
+            "scripts/judge_self_consistency.py; enriquece --judge-report"
+        ),
+    )
+    parser.add_argument(
         "--apply-hitl",
         type=Path,
         metavar="CSV",
@@ -178,6 +199,14 @@ def main() -> None:
         print(f"HITL aplicado e summary actualizado em {run_dir}")
         return
 
+    if args.judge_report is not None:
+        run_dir = args.judge_report.expanduser().resolve()
+        if not run_dir.is_dir():
+            print(f"Não é um diretório: {run_dir}", file=sys.stderr)
+            raise SystemExit(2)
+        _write_judge_report(run_dir, samples_path=args.judge_samples)
+        return
+
     if args.analyze_run is not None:
         run_dir = args.analyze_run.expanduser().resolve()
         if not run_dir.is_dir():
@@ -205,8 +234,23 @@ def main() -> None:
                 print(f"Não é um diretório: {d}", file=sys.stderr)
                 raise SystemExit(2)
         reports = [load_full_report(d) for d in dirs]
-        labels = [d.name for d in dirs]
-        cmp = compare_metric_reports(reports, labels)
+        labels = _unique_run_labels(dirs)
+        carregados = {label: load_run_flags(d) for label, d in zip(labels, dirs, strict=True)}
+        flags = {label: fl for label, (fl, _) in carregados.items() if fl}
+        falhas = {label: fa for label, (_, fa) in carregados.items() if label in flags}
+        for label, fa in falhas.items():
+            if fa:
+                print(
+                    f"Aviso: {label} tem {len(fa)} item(ns) com erro de execução; "
+                    "excluídos da estatística emparelhada.",
+                    file=sys.stderr,
+                )
+        cmp = compare_metric_reports(
+            reports,
+            labels,
+            flags_por_corrida=flags if len(flags) >= 2 else None,
+            falhas_por_corrida=falhas if len(flags) >= 2 else None,
+        )
         out = Path.cwd() / "run_comparison.json"
         out.write_text(json.dumps(cmp, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
         print(f"Gravado: {out}")
@@ -293,6 +337,96 @@ def main() -> None:
     )
 
 
+def _unique_run_labels(dirs: list[Path]) -> list[str]:
+    """Rótulos distintos para os diretórios comparados.
+
+    ``run_*`` é gerado a partir de um timestamp UTC, por isso dois diretórios em
+    árvores diferentes partilham frequentemente o basename. Como os rótulos são a
+    chave da análise emparelhada, colisões fariam corridas colapsar em silêncio —
+    aqui desambiguam-se com o diretório-pai, e com o caminho completo se preciso.
+    """
+    nomes = [d.name for d in dirs]
+    if len(set(nomes)) == len(nomes):
+        return nomes
+    com_pai = [f"{d.parent.name}/{d.name}" for d in dirs]
+    if len(set(com_pai)) == len(com_pai):
+        return com_pai
+    return [str(d) for d in dirs]
+
+
+def _load_judge_samples(path: Path) -> list[list[str]]:
+    """Lê o JSONL de autoconsistência: uma linha por item com a lista de vereditos.
+
+    O script gravador faz flush por linha, logo uma amostragem interrompida deixa
+    uma última linha parcial — tratada como erro de input (saída 2), não traceback.
+    """
+    amostras: list[list[str]] = []
+    for n, line in enumerate(path.read_text(encoding="utf-8").splitlines(), start=1):
+        if not line.strip():
+            continue
+        try:
+            row = json.loads(line)
+        except json.JSONDecodeError as exc:
+            print(f"JSONL de amostras inválido ({path}:{n}): {exc}", file=sys.stderr)
+            raise SystemExit(2) from exc
+        if not isinstance(row, dict):
+            print(
+                f"JSONL de amostras inválido ({path}:{n}): esperado objeto JSON por linha",
+                file=sys.stderr,
+            )
+            raise SystemExit(2)
+        vereditos = row.get("vereditos")
+        if isinstance(vereditos, list) and vereditos:
+            amostras.append([str(v) for v in vereditos])
+    return amostras
+
+
+def _run_summary(run_dir: Path) -> dict[str, Any]:
+    """``summary.json`` da corrida, ou vazio quando ausente/ilegível."""
+    summary_path = run_dir / "summary.json"
+    if not summary_path.is_file():
+        return {}
+    try:
+        raw = json.loads(summary_path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError:
+        return {}
+    return raw if isinstance(raw, dict) else {}
+
+
+def _write_judge_report(run_dir: Path, *, samples_path: Path | None) -> None:
+    from llm_evaluation.judge_meta import build_judge_meta_report
+
+    predictions = run_dir / "predictions.jsonl"
+    if not predictions.is_file():
+        print(f"Sem predictions.jsonl em {run_dir}", file=sys.stderr)
+        raise SystemExit(2)
+    records = load_records_from_predictions_jsonl(predictions)
+    amostras: list[list[str]] | None = None
+    if samples_path is not None:
+        resolved = samples_path.expanduser().resolve()
+        if not resolved.is_file():
+            print(f"JSONL de amostras não encontrado: {resolved}", file=sys.stderr)
+            raise SystemExit(2)
+        amostras = _load_judge_samples(resolved)
+    summary = _run_summary(run_dir)
+    tipo_ref = summary.get("tipo_referencia_ativo")
+    protocolo = summary.get("protocolo_ativo")
+    report = build_judge_meta_report(
+        records,
+        reference_type=None if tipo_ref is None else str(tipo_ref),
+        protocol=protocolo if isinstance(protocolo, dict) else None,
+        amostras_autoconsistencia=amostras,
+    )
+    out = run_dir / "judge_report.json"
+    out.write_text(json.dumps(report, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+    print(f"Gravado: {out}")
+    if report["n_itens_com_veredito_real"] == 0:
+        print(
+            "Aviso: nenhum item com veredito real do juiz — relatório vazio.",
+            file=sys.stderr,
+        )
+
+
 def _make_writer(
     path: Path,
     *,
@@ -373,7 +507,13 @@ def _run_single_corrida(
                 append=True,
             )
             try:
-                runner(cfg, pending, on_record=write)
+                runner(
+                    cfg,
+                    pending,
+                    on_record=write,
+                    run_dir=run_dir,
+                    config_name=config_path.name,
+                )
             finally:
                 fh.close()
             removed = compact_predictions_jsonl(predictions_path)
@@ -386,7 +526,13 @@ def _run_single_corrida(
             predictions_tmp = predictions_path.with_suffix(".jsonl.tmp")
             write, fh = _make_writer(predictions_tmp, include_judge_cot=include_cot)
             try:
-                runner(cfg, pending, on_record=write)
+                runner(
+                    cfg,
+                    pending,
+                    on_record=write,
+                    run_dir=run_dir,
+                    config_name=config_path.name,
+                )
             finally:
                 fh.close()
             finalize_predictions_jsonl(predictions_tmp, predictions_path)
@@ -425,13 +571,18 @@ def _run_single_corrida(
         write_summary(summary, run_dir / "summary.json")
     price_p = os.environ.get("OPENAI_PRICE_PER_1M_PROMPT")
     price_c = os.environ.get("OPENAI_PRICE_PER_1M_COMPLETION")
-    if price_p and price_c:
-        from llm_evaluation.observability import summarize_run_observability
+    from llm_evaluation.observability import (
+        prices_by_model_from_env,
+        summarize_run_observability,
+    )
 
+    precos_modelo = prices_by_model_from_env()
+    if (price_p and price_c) or precos_modelo:
         obs = summarize_run_observability(
             records,
-            price_per_1m_prompt=float(price_p),
-            price_per_1m_completion=float(price_c),
+            price_per_1m_prompt=float(price_p) if price_p else None,
+            price_per_1m_completion=float(price_c) if price_c else None,
+            prices_by_model=precos_modelo or None,
         )
         if obs:
             summary["observabilidade"] = obs
@@ -489,7 +640,13 @@ def _run_compare_baselines(
         path_tmp = path.with_suffix(".jsonl.tmp")
         write, fh = _make_writer(path_tmp)
         try:
-            recs = runner(c, items, on_record=write)
+            recs = runner(
+                c,
+                items,
+                on_record=write,
+                run_dir=run_dir,
+                config_name=config_path.name,
+            )
         finally:
             fh.close()
         finalize_predictions_jsonl(path_tmp, path)

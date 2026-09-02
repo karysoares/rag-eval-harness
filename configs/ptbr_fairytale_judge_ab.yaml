@@ -1,0 +1,122 @@
+# FairytaleQA pt-BR — protocolo de A/B de JUÍZES (200 itens emparelhados).
+#
+# É a config que produziu a comparação de três juízes publicada no README. Mantida
+# para que esses números sejam reproduzíveis, não como perfil de avaliação normal.
+#
+# Desenho: `shuffle: false` e `limit: 200` fixam exactamente os mesmos itens em
+# todas as corridas, o que torna o desenho emparelhado e permite o McNemar de
+# `--compare-runs`. O gate do juiz está desligado de propósito (`null`): para
+# comparar juízes é preciso que todos julguem os mesmos itens.
+#
+# Um braço por juiz, mudando só o .env entre corridas:
+#   LLM_MODEL=gpt-4o-mini JUDGE_MODEL=gpt-4o
+#   LLM_MODEL=gpt-4o-mini JUDGE_MODEL=gpt-4o-mini
+#   LLM_MODEL=llama3.2:latest JUDGE_MODEL=qwen2.5:latest \
+#     OPENAI_BASE_URL=http://localhost:11434 JUDGE_BASE_URL=http://localhost:11434
+#
+# Depois:
+#   uv run llm-eval --judge-report outputs/run_<id>          # por braço
+#   uv run llm-eval --compare-runs outputs/run_a outputs/run_b outputs/run_c
+#
+# Custo medido: $1,69 (juiz gpt-4o), $0,18 (gpt-4o-mini), $0,00 (local).
+# Defina LLM_EVAL_PRICES para custo por modelo — um preço único erra ~10x aqui.
+#
+# Concorrência 2 é conservadora de propósito: contas de tier baixo apanham 429
+# acima disso. Com juiz local use 1 e suba `llm.timeout_seconds` (modelos locais
+# demoram ~30 s por item num M3 de 16 GB).
+
+
+seed: 42
+orchestration: unico
+output_dir: outputs
+
+dataset:
+  name: fairytale_ptbr
+  subset: default
+  split: validation
+  reference_type: lexical
+  hf_repo: benjleite/FairytaleQA-translated-ptBR
+  hf_subset: null
+  question_column: question
+  answer_column: answer
+  context_column: story_section
+  incorrect_column: null
+  id_column: null
+  limit: 200
+  mode: hub
+  shuffle: false
+
+rag:
+  enabled: true
+  top_k: 4
+  inject_retrieval_failure: false
+  chunk_max_chars: 500
+  min_score_recuperacao: 0.25
+
+embeddings:
+  backend: sentence_transformers
+  model_name: sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2
+
+verification:
+  verify_gold: false
+  verify_embedding: true
+  verify_judge: true
+  embedding_min_cosine: 0.24
+  embedding_use_gold_chunk: true
+  judge_prompt_style: rag_pt
+  judge_return_chain_of_thought: false
+  judge_max_context_chars: 12000
+  judge_max_parse_retries: 2
+  judge_gate_embedding_max_cosine: null
+  judge_gate_requires_strong_context: true
+  judge_gate_min_retrieval_score: 0.5
+  judge_incompleto_contexto_forte_negativo: true
+  judge_incompleto_contexto_forte_min_score: 0.5
+  negative_judge_verdicts:
+    - nao_sustentado
+    - contradicacao
+    - inseguro
+    - incompleto
+  judge_aggregation_verdicts:
+    - nao_sustentado
+    - contradicacao
+    - inseguro
+
+generation:
+  temperature: 0.1
+  max_tokens: 128
+  estilo_prompt: rag_pt
+  omitir_llm_se_recuperacao_fraca: true
+  reparar_recusa_generica: true
+  min_score_recuperacao_reparo_recusa: 0.5
+  max_tentativas_reparo_recusa: 2
+
+llm:
+  concurrency: 2
+  timeout_seconds: 120
+
+aggregation:
+  policy: embedding_e_juiz
+
+operacional:
+  fila_min_score_recuperacao: 0.5
+  gap_min_score_recuperacao: 0.5
+  gap_max_f1_token: 0.15
+
+baselines:
+  profile: hibrido
+
+metricas_lexicas:
+  habilitado: true
+  f1_token: true
+  bleu: true
+  rouge_l: true
+  meteor: true
+  levenshtein: true
+  modo_referencia: max_rouge_l
+
+patterns:
+  referencia_forte:
+    f1_min: 0.65
+  referencia_fraca:
+    f1_min: 0.25

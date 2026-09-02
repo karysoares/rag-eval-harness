@@ -6,6 +6,7 @@ Chunks por item e ranking coseno pergunta↔passagem.
 from __future__ import annotations
 
 import hashlib
+import threading
 from dataclasses import dataclass
 from typing import Protocol
 
@@ -62,6 +63,53 @@ class SentenceTransformerEmbedder:
         return np.asarray(emb, dtype=np.float32)
 
 
+class CachingEmbedder:
+    """Memoriza embeddings por texto, partilhando-os entre itens e entre camadas.
+
+    Duas fontes de trabalho redundante desaparecem com esta cache:
+
+    1. Corpora com várias perguntas por documento (FairytaleQA: ~10 perguntas por
+       história) re-embebem os mesmos chunks a cada item.
+    2. ``verify_item`` re-embebe os chunks recuperados que a recuperação já tinha
+       embebido no mesmo item.
+
+    ``inner.embed`` é serializado por lock: os backends de ``sentence-transformers``
+    não garantem reentrância e, num pipeline dominado por latência de API, a
+    embebição não é o gargalo — a correção vale mais que o paralelismo aqui.
+    """
+
+    def __init__(self, inner: Embedder, *, max_entries: int = 50_000) -> None:
+        self._inner = inner
+        self._max_entries = max_entries
+        self._cache: dict[str, np.ndarray] = {}
+        self._lock = threading.Lock()
+        self.hits = 0
+        self.misses = 0
+
+    def embed(self, texts: list[str]) -> np.ndarray:
+        if not texts:
+            return self._inner.embed(texts)
+        with self._lock:
+            missing = [t for t in dict.fromkeys(texts) if t not in self._cache]
+            if missing:
+                vecs = self._inner.embed(missing)
+                if len(self._cache) + len(missing) > self._max_entries:
+                    self._cache.clear()
+                for t, v in zip(missing, vecs, strict=True):
+                    self._cache[t] = v
+            self.misses += len(missing)
+            self.hits += len(texts) - len(missing)
+            return np.stack([self._cache[t] for t in texts], axis=0)
+
+    def stats(self) -> dict[str, int | float]:
+        total = self.hits + self.misses
+        return {
+            "embeddings_cache_hits": self.hits,
+            "embeddings_cache_misses": self.misses,
+            "embeddings_cache_taxa_acerto": round(self.hits / total, 4) if total else 0.0,
+        }
+
+
 def cosine_topk(query_vec: np.ndarray, doc_vecs: np.ndarray, k: int) -> list[tuple[int, float]]:
     sims = doc_vecs @ query_vec
     k = min(k, len(sims))
@@ -101,7 +149,6 @@ class Retriever:
             out = [c for c in out if not c.is_gold]
             # pad with next best if needed
             if len(out) < top_k:
-                qv = self._embedder.embed([query])[0]
                 all_pairs = cosine_topk(qv, self._vecs, min(len(self._chunks), top_k + 5))
                 for j, score in all_pairs:
                     text = self._chunks[j]
@@ -118,10 +165,14 @@ class Retriever:
         return out[:top_k]
 
 
-def make_embedder(backend: str, model_name: str) -> Embedder:
+def make_embedder(backend: str, model_name: str, *, cache: bool = False) -> Embedder:
+    """Constrói o embedder do backend pedido; ``cache=True`` envolve em `CachingEmbedder`."""
+    inner: Embedder
     if backend == "hash":
-        return HashEmbedder()
-    if backend == "sentence_transformers":
-        return SentenceTransformerEmbedder(model_name)
-    msg = f"Unknown embeddings backend: {backend}"
-    raise ValueError(msg)
+        inner = HashEmbedder()
+    elif backend == "sentence_transformers":
+        inner = SentenceTransformerEmbedder(model_name)
+    else:
+        msg = f"Unknown embeddings backend: {backend}"
+        raise ValueError(msg)
+    return CachingEmbedder(inner) if cache else inner
