@@ -38,10 +38,10 @@ notebook = [
     "ipykernel>=6.29.0,<7",
     "jupyter>=1.1.0,<2",
     "matplotlib>=3.8.0,<4",
-    "pandas>=2.2.0,<3",
+    "pandas>=2.2.0,<4",
 ]
 dashboard = [
-    "pandas>=2.2.0,<3",
+    "pandas>=2.2.0,<4",
     "plotly>=5.24.0,<6",
     "streamlit>=1.40.0,<2",
 ]
