@@ -27,6 +27,12 @@ ragas = [
     "ragas>=0.2.0,<1",
     "langchain-openai>=0.2.0,<1",
 ]
+# Traces OTLP: serve Phoenix, LangSmith e CloudWatch (via coletor ADOT).
+# O destino `jsonl` e as métricas CloudWatch EMF não precisam deste extra.
+observability = [
+    "opentelemetry-sdk>=1.27.0,<2",
+    "opentelemetry-exporter-otlp-proto-http>=1.27.0,<2",
+]
 dev = [
     "mypy>=1.11.0,<2",
     "pytest>=8.3.0,<9",
@@ -88,6 +94,10 @@ ignore_missing_imports = true
 
 [[tool.mypy.overrides]]
 module = ["llm_evaluation.benchmarks.ragas_adapter"]
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = ["opentelemetry.*"]
 ignore_missing_imports = true
 
 [tool.pytest.ini_options]
