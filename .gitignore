@@ -37,9 +37,25 @@ run_comparison.json
 # Prompts legados na raiz (fonte canónica: src/llm_evaluation/prompts/)
 /prompts/
 
-# Documentação interna (local only)
+# Documentação: o corpo técnico é publicado; notas internas ficam locais.
 .docs/
-docs/
+docs/*
+!docs/README.md
+!docs/ARCHITECTURE.md
+!docs/DESIGN_DECISIONS.md
+!docs/PREMISSAS.md
+!docs/metrics.md
+!docs/glossary.md
+!docs/references.md
+!docs/calibracao_embedding.md
+!docs/decisions/
+!docs/specs/
+!docs/techniques/
+!docs/benchmarks/
+# Notas internas / pessoais — nunca publicar:
+# PARECER_HIRING.md, DIARIO_DE_BORDO.md, learning-notes.md,
+# RELATORIO_AVALIACAO.md, RELATORIO_MELHORIAS.md, RELEASE_CHECKLIST.md,
+# CONTRIBUTING.md e SECURITY.md (duplicam os da raiz), evidencia/ (corridas locais).
 
 notebooks/
 # Cursor IDE (local only)
