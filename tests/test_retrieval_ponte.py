@@ -43,36 +43,63 @@ class TestConversaoParaItens:
         itens = itens_para_pipeline(_conjunto(), _corrida())
         assert itens[0].correct_answers == ["resposta um"]
 
-    def test_chunk_ouro_e_a_passagem_julgada_mesmo_fora_da_janela(self) -> None:
-        # q2 só encontra d5 na posição 6; com top_k=4 fica fora da janela. O chunk
-        # ouro tem de continuar presente, senão o pipeline não distingue «não
-        # recuperou» de «recuperou e respondeu mal».
+    def test_passagem_relevante_fora_da_janela_nao_entra_no_contexto(self) -> None:
+        # REGRESSÃO — o defeito que anulou uma corrida inteira. `rag_gold_chunk`
+        # era preenchido sempre, e `build_chunks_for_item` põe-no em PRIMEIRO
+        # lugar no contexto: o braço degradado recebia de volta exactamente a
+        # passagem que a degradação lhe devia ter tirado (97 de 100 itens).
+        # q2 só encontra d5 na posição 6; com top_k=4 fica fora da janela.
         itens = itens_para_pipeline(_conjunto(), _corrida(), top_k=4)
         q2 = next(i for i in itens if i.id == "q2")
-        assert q2.rag_gold_chunk == "texto 5"
+        assert q2.rag_gold_chunk is None
         assert "texto 5" not in q2.rag_distractors
 
-    def test_o_relevante_nao_entra_tambem_como_distrator(self) -> None:
+    def test_relevante_dentro_da_janela_vira_chunk_ouro_sem_duplicar(self) -> None:
         itens = itens_para_pipeline(_conjunto(), _corrida(), top_k=4)
         q1 = next(i for i in itens if i.id == "q1")
         assert q1.rag_gold_chunk == "texto 0"
         assert "texto 0" not in q1.rag_distractors
         assert q1.rag_distractors == ["texto 1", "texto 2", "texto 3"]
 
-    def test_desvio_desloca_a_janela_sem_mudar_mais_nada(self) -> None:
+    def test_o_contexto_e_exactamente_a_janela(self) -> None:
+        """Nada entra no contexto que a recuperação não tenha trazido."""
+        for desvio in (0, 2, 4):
+            for item in itens_para_pipeline(_conjunto(), _corrida(), top_k=3, desvio=desvio):
+                candidatos = _corrida()[item.id][desvio : desvio + 3]
+                esperado = {f"texto {d[1:]}" for d in candidatos}
+                obtido = set(item.rag_distractors)
+                if item.rag_gold_chunk:
+                    obtido.add(item.rag_gold_chunk)
+                assert obtido == esperado, f"{item.id} desvio={desvio}"
+
+    def test_segundo_relevante_na_janela_segue_como_contexto(self) -> None:
+        # O HotpotQA tem 2 relevantes por query; descartar o segundo removeria a
+        # evidência de que a pergunta multi-hop precisa.
+        from dataclasses import replace
+
+        c = replace(_conjunto(), qrels={"q1": {"d0": 1.0, "d2": 1.0}, "q2": {"d5": 1.0}})
+        q1 = next(i for i in itens_para_pipeline(c, _corrida(), top_k=4) if i.id == "q1")
+        assert q1.rag_gold_chunk == "texto 0"
+        assert "texto 2" in q1.rag_distractors
+
+    def test_desvio_muda_o_contexto_e_so_o_contexto(self) -> None:
         base = itens_para_pipeline(_conjunto(), _corrida(), top_k=2, desvio=0)
         degradado = itens_para_pipeline(_conjunto(), _corrida(), top_k=2, desvio=4)
         assert [i.id for i in base] == [i.id for i in degradado]
         assert [i.question for i in base] == [i.question for i in degradado]
         assert [i.correct_answers for i in base] == [i.correct_answers for i in degradado]
-        assert [i.rag_gold_chunk for i in base] == [i.rag_gold_chunk for i in degradado]
-        # Só o contexto muda — é o desenho da ablação.
+        # O contexto muda — incluindo o chunk ouro, que só existe se a janela o
+        # trouxer. Antes esta asserção exigia que fosse IGUAL nos dois braços, e
+        # era essa igualdade que anulava a ablação.
+        assert base[0].rag_gold_chunk == "texto 0"
+        assert degradado[0].rag_gold_chunk is None
         assert base[0].rag_distractors != degradado[0].rag_distractors
 
-    def test_query_sem_candidatos_produz_item_sem_contexto(self) -> None:
+    def test_query_sem_candidatos_produz_item_sem_contexto_nenhum(self) -> None:
         itens = itens_para_pipeline(_conjunto(), {"q1": [], "q2": []})
         assert all(i.rag_distractors == [] for i in itens)
-        assert all(i.rag_gold_chunk for i in itens)
+        # Sem recuperação não há contexto: nem distractores, nem chunk ouro.
+        assert all(i.rag_gold_chunk is None for i in itens)
 
 
 class TestCobertura:

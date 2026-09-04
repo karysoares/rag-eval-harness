@@ -230,18 +230,28 @@ def itens_para_pipeline(
     mesmo recuperador, mesmas queries, mesma geração. A única variável é a
     qualidade do contexto entregue.
 
-    O ``rag_gold_chunk`` é a passagem julgada relevante, entre nos candidatos ou
-    não: é o que permite ao pipeline distinguir «não recuperou» de «recuperou e
-    respondeu mal».
+    O ``rag_gold_chunk`` é preenchido **apenas quando a passagem relevante caiu
+    mesmo dentro da janela**. Anexá-lo sempre foi um defeito real e caro: como
+    ``build_chunks_for_item`` coloca o chunk ouro em primeiro lugar no contexto,
+    o braço degradado recebia na mesma a passagem que a degradação devia ter-lhe
+    tirado — 97 de 100 itens numa corrida cujos números foram deitados fora. É a
+    mesma falha do corpus sintético da SPEC-001 a reaparecer dentro do módulo
+    construído para a eliminar.
+
+    O contexto entregue é, e só é, o que a janela contém.
     """
     por_id = dict(zip(conjunto.doc_ids, conjunto.textos, strict=True))
     itens: list[EvalItem] = []
     for qid in sorted(conjunto.qrels):
         candidatos = corrida.get(qid, [])
-        janela = candidatos[desvio : desvio + top_k]
-        relevantes = sorted(conjunto.qrels[qid])
-        ouro = por_id.get(relevantes[0], "") if relevantes else ""
-        distratores = [por_id[d] for d in janela if d in por_id and d not in set(relevantes)]
+        janela = [d for d in candidatos[desvio : desvio + top_k] if d in por_id]
+        relevantes = set(conjunto.qrels[qid])
+        na_janela = [d for d in janela if d in relevantes]
+        # Um relevante que caiu na janela vira chunk ouro; os restantes seguem
+        # como contexto normal — o HotpotQA tem 2 relevantes por query e descartar
+        # o segundo removeria a evidência de que a pergunta precisa.
+        ouro = por_id[na_janela[0]] if na_janela else None
+        resto = [por_id[d] for d in janela if not na_janela or d != na_janela[0]]
         itens.append(
             EvalItem(
                 id=qid,
@@ -250,7 +260,7 @@ def itens_para_pipeline(
                 incorrect_answers=[],
                 category="hotpotqa",
                 rag_gold_chunk=ouro,
-                rag_distractors=distratores,
+                rag_distractors=resto,
             )
         )
     return itens
