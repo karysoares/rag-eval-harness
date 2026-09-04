@@ -82,6 +82,44 @@ uma diferença no grounding não se distingue de ruído. Medida sobre 100 querie
 Três braços dão **dose-resposta**, e não um binário: se o grounding cair monotonicamente
 com a cobertura, a conclusão é muito mais forte do que «com contexto é melhor que sem».
 
+### O defeito que anulou a primeira corrida
+
+Vale documentado porque é instrutivo e porque voltará a tentar acontecer.
+
+A primeira corrida completa deu o resultado ao contrário: o braço com cobertura
+**0,01** teve a **maior** taxa de aprovação (0,930 contra 0,870 do braço com cobertura
+0,96). Investigado em vez de publicado, a causa era do desenho:
+
+`itens_para_pipeline` preenchia `rag_gold_chunk` **sempre**, e `build_chunks_for_item`
+(`datasets_rag.py:18`) coloca o chunk ouro em **primeiro lugar** no contexto. O braço
+degradado recebia de volta exactamente a passagem que a degradação lhe devia ter tirado:
+**97 de 100 itens**. Os braços eram quase idênticos e a experiência não manipulou nada.
+
+É a falha do corpus sintético da [SPEC-001](001-retrieval.md) a reaparecer dentro do
+módulo construído para a eliminar. E estava consagrada num teste, defendida com o
+argumento de que o chunk ouro ficava «para o pipeline distinguir *não recuperou* de
+*recuperou e respondeu mal*» — raciocínio errado, porque anexar a passagem **torna-a
+recuperada**. Essa informação é a cobertura, que já estava a ser calculada.
+
+**A lição, generalizável:** verificar o ranking não verifica a experiência. O ranking
+estava correcto; o que estava errado era o contexto entregue. `verifica_manipulacao`
+aborta antes de qualquer chamada de geração se os braços não diferirem no **contexto
+montado**, medido por `contexto_entregue_tem_relevante`, que reconstrói os chunks
+exactamente como o pipeline faz:
+
+| braço | cobertura | contexto com relevante (defeituoso) | contexto com relevante (corrigido) |
+|-------|-----------|--------------------------------------|-------------------------------------|
+| `desvio_0` | 0,96 | 96/100 | 96/100 |
+| `desvio_2` | 0,16 | 97/100 | 16/100 |
+| `desvio_50` | 0,01 | 97/100 | 1/100 |
+
+Segundo defeito encontrado ao corrigir: os distractores excluíam **todas** as passagens
+julgadas, portanto a segunda passagem relevante do HotpotQA era descartada quando caía
+na janela. Estas perguntas exigem compor factos de duas passagens; remover uma remove
+silenciosamente a evidência.
+
+Os números da corrida defeituosa não são publicados.
+
 ### Escolhas de configuração que existem para não contaminar a comparação
 
 | Definição | Valor | Porquê |
@@ -111,6 +149,66 @@ prompt errado.
 
 Efeito colateral corrigido: `rag_en` normalizava para `rag_pt`. Quem escrevesse `rag_en`
 num config recebia exactamente o contrário do que pediu; passa a apontar para `generic`.
+
+## Resultados medidos
+
+100 queries, índice de 150 199 passagens, `top_k=4`, gerador `gpt-4o-mini`, juiz `gpt-4o`,
+prompts `generic`. Zero itens excluídos por erro de execução ou fallback, nos três braços.
+
+| braço | contexto com relevante | respondeu | **respondeu e sustentado** | recusou | alucinou |
+|-------|------------------------|-----------|----------------------------|---------|----------|
+| `desvio_0` | 96/100 | 0,830 | **0,690** | 0,170 | 0,090 |
+| `desvio_2` | 16/100 | 0,180 | **0,080** | 0,820 | 0,070 |
+| `desvio_50` | 1/100 | 0,030 | **0,000** | 0,970 | 0,020 |
+
+Bootstrap emparelhado sobre «respondeu e sustentado», 100 pares:
+
+| par | diferença | IC 95% | McNemar |
+|-----|-----------|--------|---------|
+| `desvio_0` vs `desvio_2` | +0,610 | [+0,510, +0,710] | p = 1,6 × 10⁻¹⁴ |
+| `desvio_0` vs `desvio_50` | +0,690 | [+0,600, +0,780] | p = 2,7 × 10⁻¹⁶ |
+| `desvio_2` vs `desvio_50` | +0,080 | [+0,030, +0,140] | p = 0,0078 |
+
+**Dose-resposta monotónica, os três intervalos excluem zero.** A recuperação determina se
+o sistema consegue responder de todo. É a primeira medição neste repositório que liga
+qualidade de recuperação a qualidade de resposta nos mesmos itens.
+
+**O sistema falha de forma segura.** Alucinação **desce** quando a recuperação piora
+(0,090 → 0,070 → 0,020): sem contexto o modelo recusa em vez de inventar. Só o par
+extremo é distinguível de ruído, mas o sinal é consistente e é o que se quer de um
+sistema RAG — vale a pena porque nada no desenho o garantia.
+
+### A métrica óbvia aponta ao contrário
+
+A taxa de aprovação do juiz — o KPI que sairia naturalmente do `summary.json` — é:
+
+| braço | taxa aprovada |
+|-------|---------------|
+| `desvio_0` | 0,910 |
+| `desvio_2` | 0,930 |
+| `desvio_50` | **0,980** |
+
+**Sobe à medida que a recuperação piora.** Não é um defeito do juiz: a árvore de decisão
+manda classificar como `sustentado` uma recusa honesta quando o contexto é genuinamente
+insuficiente, e é o comportamento correcto. O defeito é usá-la como KPI de produto — ela
+mistura «respondeu bem» com «recusou bem», e um sistema que não recupera nada recusa
+sempre e pontua 0,98.
+
+É a [regra 8 do `CLAUDE.md`](../../CLAUDE.md) — planos métricos não se misturam — a
+aparecer com números. A variável dependente correcta separa os dois: **respondeu**
+(tentou) e **respondeu e sustentado** (tentou e acertou o grounding). A recusa é
+comportamento desejável e não é produto.
+
+### O plano léxico não mede nada aqui
+
+`exact_match` é **0,000 nos três braços** e o F1 de tokens fica em 0,225 no melhor. Não é
+resultado: é artefacto de configuração. As respostas do HotpotQA são spans de 1 a 5
+palavras («Yoruba»), e o prompt `generic` pede uma frase curta («The Yoruba people have
+significant populations in…»). A sobreposição entre uma frase e um span é estruturalmente
+baixa, e a igualdade exacta é impossível.
+
+Os números léxicos desta corrida **não são publicáveis** e não entram em nenhuma
+conclusão. Corrigir exige um modo de extracção de span no prompt, e é outra corrida.
 
 ## Estatística
 
@@ -152,4 +250,7 @@ parâmetros, a cobertura e a taxa por braço, e as comparações emparelhadas.
 - [x] Exclusões contadas por braço e declaradas.
 - [x] Prompts agnósticos ao corpus, com hashing de proveniência a acompanhar o estilo.
 - [x] `predictions.jsonl` por braço.
+- [x] Verificação do **contexto entregue** antes da geração, não só do ranking.
+- [x] Dose-resposta medida, com IC a excluir zero nos três pares.
+- [ ] Modo de extracção de span, para o plano léxico ser interpretável neste conjunto.
 - [ ] Estratificação por tipo de pergunta (`comparison` vs `bridge`).
