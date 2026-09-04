@@ -6,6 +6,8 @@ e não é exercitado aqui.
 
 from __future__ import annotations
 
+import pytest
+
 from llm_evaluation.retrieval_eval.ponte import (
     ConjuntoPonte,
     cobertura_da_recuperacao,
@@ -136,3 +138,34 @@ class TestResumoDeclaraOQueFoiFeitoAoIndice:
 
         c = replace(_conjunto(), n_corpus_original=10)
         assert c.resumo()["corpus_subamostrado"] is False
+
+
+class TestVerificacaoDaManipulacao:
+    """A guarda que teria apanhado o defeito antes de gastar dinheiro."""
+
+    def test_contexto_entregue_conta_o_que_chega_ao_gerador(self) -> None:
+        from llm_evaluation.retrieval_eval.ponte import contexto_entregue_tem_relevante
+
+        c = _conjunto()
+        topo = itens_para_pipeline(c, _corrida(), top_k=4, desvio=0)
+        fundo = itens_para_pipeline(c, _corrida(), top_k=4, desvio=6)
+        assert contexto_entregue_tem_relevante(c, topo)["n_com_relevante_no_contexto"] == 1
+        assert contexto_entregue_tem_relevante(c, fundo)["n_com_relevante_no_contexto"] == 0
+
+    def test_bracos_equivalentes_abortam_antes_da_geracao(self) -> None:
+        from llm_evaluation.retrieval_eval.ponte import verifica_manipulacao
+
+        with pytest.raises(ValueError, match="não distinguíveis"):
+            verifica_manipulacao(
+                {"a": {"fracao": 0.97}, "b": {"fracao": 0.96}},
+            )
+
+    def test_bracos_distintos_passam(self) -> None:
+        from llm_evaluation.retrieval_eval.ponte import verifica_manipulacao
+
+        verifica_manipulacao({"a": {"fracao": 0.96}, "b": {"fracao": 0.01}})
+
+    def test_um_so_braco_nao_e_verificavel(self) -> None:
+        from llm_evaluation.retrieval_eval.ponte import verifica_manipulacao
+
+        verifica_manipulacao({"a": {"fracao": 0.5}})

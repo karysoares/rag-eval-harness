@@ -266,6 +266,59 @@ def itens_para_pipeline(
     return itens
 
 
+def contexto_entregue_tem_relevante(
+    conjunto: ConjuntoPonte,
+    itens: list[EvalItem],
+    *,
+    chunk_max_chars: int = 1200,
+) -> dict[str, Any]:
+    """Fracção de itens cujo **contexto montado** contém uma passagem relevante.
+
+    A cobertura mede o ranking; isto mede o que chega ao gerador. As duas podem
+    divergir, e divergiram: `rag_gold_chunk` era anexado sempre e
+    `build_chunks_for_item` põe-no em primeiro lugar, portanto o braço degradado
+    recebia de volta a passagem que a degradação lhe tirara — 97 de 100 itens,
+    numa corrida cujos números tiveram de ser deitados fora.
+
+    Uma ablação sem esta verificação pode correr inteira, custar dinheiro, e
+    medir nada.
+    """
+    from llm_evaluation.datasets_rag import build_chunks_for_item
+
+    por_id = dict(zip(conjunto.doc_ids, conjunto.textos, strict=True))
+    com_relevante = 0
+    for item in itens:
+        chunks = build_chunks_for_item(item, chunk_max_chars)
+        relevantes = {por_id[d] for d in conjunto.qrels.get(item.id, {}) if d in por_id}
+        # Prefixo e não igualdade: `chunk_text` parte passagens longas.
+        if any(any(t[:80] == c[:80] for t in relevantes) for c in chunks):
+            com_relevante += 1
+    total = len(itens)
+    return {
+        "n_itens": total,
+        "n_com_relevante_no_contexto": com_relevante,
+        "fracao": round(com_relevante / total, 4) if total else None,
+    }
+
+
+def verifica_manipulacao(por_braco: dict[str, dict[str, Any]], *, minimo: float = 0.2) -> None:
+    """Aborta se os braços entregam contextos equivalentes.
+
+    Correr a geração quando os braços não diferem gasta dinheiro para medir ruído
+    e produz um resultado que parece interpretável. Falhar aqui é barato.
+    """
+    fracoes = {n: v["fracao"] for n, v in por_braco.items() if v["fracao"] is not None}
+    if len(fracoes) < 2:
+        return
+    amplitude = max(fracoes.values()) - min(fracoes.values())
+    if amplitude < minimo:
+        msg = (
+            f"Braços não distinguíveis no contexto entregue: {fracoes}. "
+            f"Amplitude {amplitude:.3f} < {minimo}. A geração mediria ruído."
+        )
+        raise ValueError(msg)
+
+
 def cobertura_da_recuperacao(
     conjunto: ConjuntoPonte,
     corrida: dict[str, list[str]],

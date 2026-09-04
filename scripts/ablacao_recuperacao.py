@@ -38,7 +38,9 @@ from llm_evaluation.retrieval_eval.ponte import (
     ConjuntoPonte,
     carrega_ponte_hotpotqa,
     cobertura_da_recuperacao,
+    contexto_entregue_tem_relevante,
     itens_para_pipeline,
+    verifica_manipulacao,
 )
 from llm_evaluation.statistics import mcnemar_test, paired_bootstrap_diff_ci
 from llm_evaluation.types import RunRecord
@@ -139,6 +141,7 @@ def main() -> None:
         help="início da janela em cada braço; 0 = recuperação normal",
     )
     p.add_argument("--config", type=Path, default=Path("configs/hotpotqa_ponte.yaml"))
+    p.add_argument("--chunk-max-chars", type=int, default=1200, help="igual ao rag.chunk_max_chars")
     p.add_argument("--so-recuperacao", action="store_true", help="pára antes da geração")
     p.add_argument("--saida", type=Path, default=Path("outputs/ablacao"))
     args = p.parse_args()
@@ -164,9 +167,17 @@ def main() -> None:
         cob = cobertura_da_recuperacao(conjunto, corrida, top_k=args.top_k, desvio=desvio)
         itens = itens_para_pipeline(conjunto, corrida, top_k=args.top_k, desvio=desvio)
         itens_por_braco[nome] = itens
-        bracos[nome] = {"cobertura": cob, "n_itens": len(itens)}
+        # O que importa é o contexto que o gerador recebe, não o ranking: as duas
+        # coisas já divergiram e custaram uma corrida inteira.
+        entregue = contexto_entregue_tem_relevante(
+            conjunto, itens, chunk_max_chars=args.chunk_max_chars
+        )
+        bracos[nome] = {"cobertura": cob, "contexto_entregue": entregue, "n_itens": len(itens)}
         acertos = f"{cob['n_com_relevante_na_janela']}/{cob['n_queries']}"
-        print(f"[{nome:<12}] cobertura={cob['cobertura']}  ({acertos})")
+        entregues = f"{entregue['n_com_relevante_no_contexto']}/{entregue['n_itens']}"
+        print(f"[{nome:<12}] cobertura={cob['cobertura']} ({acertos})  contexto={entregues}")
+
+    verifica_manipulacao({n: v["contexto_entregue"] for n, v in bracos.items()})
 
     args.saida.mkdir(parents=True, exist_ok=True)
     relatorio = {
