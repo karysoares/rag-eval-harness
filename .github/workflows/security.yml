@@ -43,16 +43,50 @@ jobs:
         # com "cannot be installed when requiring hashes" antes de auditar seja o que for.
         run: uv export --no-dev --no-emit-project --format requirements-txt > requirements-audit.txt
       - name: pip-audit
-        # Informativo, não bloqueante. Os achados actuais são transitivos de
-        # sentence-transformers/datasets e as correcções estão fora do alcance dos
-        # nossos limites de versão (`sentence-transformers<5` prende transformers em
-        # 4.x; `datasets<4` prende a correcção que só existe em 5.0.1). Três avisos
-        # não têm correcção publicada, por isso "zero achados" não é alcançável hoje.
-        # Subir estes limites é uma migração de majors com risco para os embeddings
-        # e merece o seu próprio ciclo de verificação — ver a issue de dívida técnica.
-        continue-on-error: true
+        # BLOQUEANTE, com allowlist explícita. Um gate que nunca pode passar ensina
+        # a equipa a ignorá-lo; um gate com allowlist falha quando aparece um achado
+        # *novo*, que é a única coisa que interessa detectar.
+        #
+        # Cada id abaixo tem de ter razão escrita. Quando um sair da lista, sai
+        # também o comentário. A lista foi reduzida de 83 achados para 7 ao
+        # refrescar o `uv.lock` — as restantes 76 correcções cabiam nos limites de
+        # versão já declarados e estavam apenas por instalar.
+        #
+        # Os sete que sobram partilham a mesma forma: exigem que o processo carregue
+        # um repositório de modelo ou de dataset controlado por um atacante. Este
+        # harness carrega repositórios nomeados no YAML de configuração, por isso a
+        # exposição existe e depende de quem escreve o config — não é remota nem
+        # alcançável por dados de entrada.
+        #
+        # transformers 4.57.6 — preso em 4.x por `sentence-transformers<5`:
+        #   PYSEC-2026-2288  torch.load sem weights_only no Trainer. Não usamos
+        #                    Trainer (não há treino neste projecto), e a exploração
+        #                    exige PyTorch <2.6; o lock traz 2.14.
+        #   PYSEC-2026-2289  config.json malicioso com _attn_implementation_internal.
+        #                    Correcção só em 5.3.0.
+        #   PYSEC-2026-2290  caminho do LightGlue. O aviso descreve a 5.2.0; não há
+        #                    correcção publicada para a linha 4.x.
+        #   PYSEC-2025-217   conversão de checkpoints X-CLIP. Sem correcção publicada.
+        #   CVE-2026-9856    path traversal em save_pretrained. Não gravamos
+        #                    tokenizers; correcção só em 5.10.0.
+        # datasets 3.6.0 — preso em 3.x por `datasets<4`:
+        #   PYSEC-2026-3716  path traversal em builders de pasta, via save_to_disk /
+        #                    push_to_hub. Não usamos nenhum dos dois. Correcção em 5.0.1.
+        # nltk 3.10.3 — já na versão mais recente:
+        #   PYSEC-2026-3740  bypass de sandbox em APIs de artefactos de modelo
+        #                    (TransitionParser, PerceptronTagger). Sem correcção
+        #                    publicada. Só usamos meteor_score.
+        #
+        # Subir `sentence-transformers` para 5.x e `datasets` para 5.x fecha seis
+        # destes, e é uma migração de majors que pode mover os embeddings — logo
+        # obriga a re-medir FIQA, os quatro juízes e a calibração. Tem issue própria
+        # e não entra escondida num commit de segurança.
         run: |
-          pipx run pip-audit -r requirements-audit.txt --strict || {
-            echo "::warning::pip-audit encontrou vulnerabilidades — ver issue de dívida de dependências";
-            exit 1;
-          }
+          pipx run pip-audit -r requirements-audit.txt --strict \
+            --ignore-vuln PYSEC-2026-2288 \
+            --ignore-vuln PYSEC-2026-2289 \
+            --ignore-vuln PYSEC-2026-2290 \
+            --ignore-vuln PYSEC-2025-217 \
+            --ignore-vuln CVE-2026-9856 \
+            --ignore-vuln PYSEC-2026-3716 \
+            --ignore-vuln PYSEC-2026-3740
