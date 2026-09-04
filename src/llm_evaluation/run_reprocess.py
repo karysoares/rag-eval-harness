@@ -29,6 +29,7 @@ def provenance_block(metadados: dict[str, Any]) -> dict[str, object]:
         "versao_pacote": _package_version(),
         "git_commit": metadados.get("git_commit"),
         "config_path": metadados.get("config_path"),
+        "determinismo": metadados.get("determinismo"),
     }
 
 

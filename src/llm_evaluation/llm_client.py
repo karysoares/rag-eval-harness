@@ -182,6 +182,33 @@ def _permanent_http_error(response: httpx.Response) -> PermanentApiError:
     )
 
 
+#: Modelos cujo fornecedor rejeitou o ``temperature`` pedido durante esta corrida.
+#: Global e não por instância porque a informação é da **corrida**, não do cliente:
+#: quem escreve o `summary.json` (`collect_run_metadata`) não tem os clientes à mão,
+#: e sem isto o aviso ficava só no stderr — um facto que altera a interpretação dos
+#: números sem deixar rasto no artefacto.
+_TEMPERATURE_REJECTED: set[str] = set()
+_TEMPERATURE_LOCK = threading.Lock()
+
+
+def record_temperature_rejected(model: str) -> None:
+    """Regista que ``model`` correu sem o ``temperature`` pedido."""
+    with _TEMPERATURE_LOCK:
+        _TEMPERATURE_REJECTED.add(model)
+
+
+def temperature_rejected_models() -> list[str]:
+    """Modelos que perderam determinismo nesta corrida, por ordem estável."""
+    with _TEMPERATURE_LOCK:
+        return sorted(_TEMPERATURE_REJECTED)
+
+
+def reset_temperature_rejected() -> None:
+    """Limpa o registo. Para testes e para corridas encadeadas no mesmo processo."""
+    with _TEMPERATURE_LOCK:
+        _TEMPERATURE_REJECTED.clear()
+
+
 @dataclass
 class OpenAiCompatibleClient:
     """Cliente OpenAI-compatible com timeout, parâmetros padrão e retry para erros transitórios."""
@@ -200,7 +227,8 @@ class OpenAiCompatibleClient:
     #: Ligações simultâneas do pool HTTP. Deve ser >= à concorrência de itens da
     #: corrida; ``pool_size_for_concurrency`` calcula-o e ``run_batch`` passa-o.
     max_connections: int = DEFAULT_MAX_CONNECTIONS
-    #: Ficou verdadeiro se o fornecedor rejeitou o ``temperature`` pedido.
+    #: Ficou verdadeiro se o fornecedor rejeitou o ``temperature`` pedido. Para o
+    #: artefacto usa-se ``temperature_rejected_models()``, que é da corrida inteira.
     temperature_rejected: bool = field(default=False, init=False, compare=False)
     _usage_tls: threading.local = field(
         default_factory=threading.local,
@@ -318,7 +346,8 @@ class OpenAiCompatibleClient:
         obter determinismo, esses modelos falhariam **todas** as chamadas — e o
         fallback heurístico, que responde ``sustentado``, faria um juiz avariado
         parecer um juiz permissivo. Preferimos perder o determinismo a produzir
-        vereditos silenciosamente falsos, e o facto fica registado em meta.
+        vereditos silenciosamente falsos, e o facto fica registado na
+        proveniência do `summary.json` (ver ``temperature_rejected_models``).
         """
         if response.status_code != 400:
             return False
@@ -354,6 +383,7 @@ class OpenAiCompatibleClient:
 
             if "temperature" in payload and self._rejects_temperature(r):
                 self.temperature_rejected = True
+                record_temperature_rejected(self.model)
                 payload.pop("temperature")
                 print(
                     f"[llm] {self.model} não aceita temperature={self.temperature}; "

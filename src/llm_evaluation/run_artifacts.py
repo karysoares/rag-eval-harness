@@ -126,9 +126,13 @@ def collect_run_metadata(
     run_dir: Path,
     n_records: int,
 ) -> dict[str, Any]:
-    from llm_evaluation.llm_client import resolve_models_from_env
+    from llm_evaluation.llm_client import (
+        resolve_models_from_env,
+        temperature_rejected_models,
+    )
 
     llm_model, judge_model = resolve_models_from_env()
+    sem_determinismo = temperature_rejected_models()
     return {
         "timestamp_utc": datetime.now(tz=UTC).isoformat(),
         "run_id": run_dir.name,
@@ -150,6 +154,14 @@ def collect_run_metadata(
             "llm_juiz": judge_model,
             "embeddings": cfg.embeddings.model_name,
             "embeddings_backend": cfg.embeddings.backend,
+        },
+        # Um modelo que rejeita `temperature` corre com a temperatura por omissão:
+        # a corrida deixa de ser reproduzível e o leitor tem de o saber ao lado dos
+        # números, não só no stderr de quem a lançou.
+        "determinismo": {
+            "temperatura_fixada": True,
+            "modelos_sem_temperatura": sem_determinismo,
+            "reproduzivel": not sem_determinismo,
         },
         "prompt_hashes_sha256": compute_prompt_hashes(cfg),
         "n_registos": n_records,
