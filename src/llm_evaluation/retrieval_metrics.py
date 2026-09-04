@@ -54,7 +54,8 @@ def compute_retrieval_metrics(
         # Com o corpus todo devolvido, o retriever ordenou mas não seleccionou.
         out["corpus_devolvido_inteiro"] = len(retrieved) >= n_chunks_corpus
     if corpus_tem_distratores is not None:
+        # Só o booleano por item: a nota que o explica vive no agregado, ao lado da
+        # taxa que ela qualifica. Repeti-la em cada linha do JSONL acrescentava
+        # ~200 bytes idênticos por item sem chegar a quem lê o sumário.
         out["corpus_tem_distratores"] = corpus_tem_distratores
-        if not corpus_tem_distratores and has_gold_corpus:
-            out["nota_recuperacao_degenerada"] = NOTA_CORPUS_SEM_DISTRATORES
     return out

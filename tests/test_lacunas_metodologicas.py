@@ -227,7 +227,34 @@ def test_metricas_declaram_corpus_sem_distratores() -> None:
     )
     assert m["corpus_tem_distratores"] is False
     assert m["corpus_devolvido_inteiro"] is True
-    assert m["nota_recuperacao_degenerada"] == NOTA_CORPUS_SEM_DISTRATORES
+    # A nota que qualifica a taxa vive no agregado, não repetida em cada linha.
+    assert "nota_recuperacao_degenerada" not in m
+
+
+def test_sumario_qualifica_taxa_quando_nenhum_item_tem_distratores() -> None:
+    """`taxa_chunk_ouro_no_top_k` publicava 1,0 como se fosse resultado."""
+    recs = [
+        _registo(
+            f"r{i}",
+            anomalia=False,
+            meta={
+                "metricas_recuperacao": {
+                    "rag_ativo": True,
+                    "n_chunks_recuperados": 2,
+                    "score_melhor_chunk": 0.5,
+                    "rank_chunk_ouro": 1,
+                    "chunk_ouro_no_top_k": True,
+                    "corpus_tem_chunk_ouro": True,
+                    "corpus_tem_distratores": False,
+                }
+            },
+        )
+        for i in range(3)
+    ]
+    ret = summarize(recs, reference_type="none")["sumario_recuperacao"]
+    assert ret["taxa_chunk_ouro_no_top_k"] == 1.0
+    assert ret["n_itens_corpus_sem_distratores"] == 3
+    assert ret["nota_taxa_degenerada"] == NOTA_CORPUS_SEM_DISTRATORES
 
 
 def test_metricas_sem_nota_quando_ha_distratores() -> None:

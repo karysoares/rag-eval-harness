@@ -10,6 +10,7 @@ from pathlib import Path
 
 from llm_evaluation.pattern_registry import build_pattern_settings
 from llm_evaluation.reference_metrics import referencia_incorreta
+from llm_evaluation.retrieval_metrics import NOTA_CORPUS_SEM_DISTRATORES
 from llm_evaluation.run_artifacts import atomic_write_json, atomic_write_text
 from llm_evaluation.schema_registry import PREDICTIONS_SCHEMA_VERSION, SUMMARY_SCHEMA_VERSION
 from llm_evaluation.statistics import cohen_kappa, wilson_ci
@@ -278,6 +279,8 @@ def summarize(
         n_rag = 0
         n_gold_in_top = 0
         n_with_gold_corpus = 0
+        n_sem_distratores = 0
+        n_com_info_distratores = 0
         for r in records:
             rm = r.meta.get("metricas_recuperacao") or r.meta.get("retrieval_metrics")
             if not isinstance(rm, dict) or not rm.get("rag_ativo"):
@@ -290,6 +293,10 @@ def summarize(
                 n_gold_in_top += 1
             if rm.get("corpus_tem_chunk_ouro"):
                 n_with_gold_corpus += 1
+            if "corpus_tem_distratores" in rm:
+                n_com_info_distratores += 1
+                if not rm.get("corpus_tem_distratores"):
+                    n_sem_distratores += 1
             rk = rm.get("rank_chunk_ouro")
             if rk is not None:
                 ranks.append(int(rk))
@@ -300,7 +307,7 @@ def summarize(
         def mean(xs: list[float]) -> float | None:
             return sum(xs) / len(xs) if xs else None
 
-        return {
+        out_ret: dict[str, object] = {
             "n_itens_com_rag": n_rag,
             "media_score_melhor_chunk": mean(scores),
             "taxa_chunk_ouro_no_top_k": (
@@ -309,6 +316,19 @@ def summarize(
             "n_itens_com_chunk_ouro_no_corpus": n_with_gold_corpus,
             "media_rank_chunk_ouro_quando_presente": mean([float(x) for x in ranks]),
         }
+        if n_com_info_distratores:
+            # A qualificação vive aqui e não por item: é `taxa_chunk_ouro_no_top_k`
+            # que é lida, e sem isto ela publica 1,0 como se fosse um resultado.
+            out_ret["n_itens_corpus_sem_distratores"] = n_sem_distratores
+            if n_sem_distratores == n_com_info_distratores:
+                out_ret["nota_taxa_degenerada"] = NOTA_CORPUS_SEM_DISTRATORES
+            elif n_sem_distratores:
+                out_ret["nota_taxa_degenerada"] = (
+                    f"{n_sem_distratores} de {n_com_info_distratores} itens têm corpus sem "
+                    "distratores e só podiam dar 'ouro no top-k' verdadeiro; a taxa mistura "
+                    "esses com itens onde a recuperação teve alternativas."
+                )
+        return out_ret
 
     def _lexical_summary() -> dict[str, object] | None:
         bleu_vals: list[float] = []

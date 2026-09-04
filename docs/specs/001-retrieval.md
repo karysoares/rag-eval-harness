@@ -34,7 +34,7 @@ Medir qualidade do retriever **antes** da geração, sem misturar com anomalia a
 | `n_chunks_corpus` | int | Tamanho do universo de busca do item |
 | `corpus_devolvido_inteiro` | bool | `n_chunks_recuperados >= n_chunks_corpus`: o retriever ordenou, não seleccionou |
 | `corpus_tem_distratores` | bool | `false` ⇒ «ouro no top-k» só pode dar verdadeiro |
-| `nota_recuperacao_degenerada` | str | Presente só quando não há distratores; diz que a métrica não mede recuperação |
+
 
 ## Semântica dos scores
 
@@ -55,6 +55,8 @@ Calculadas em `reporting.summarize()` → `_retrieval_summary()`: percorre todos
 | `taxa_chunk_ouro_no_top_k` | `count(chunk_ouro_no_top_k) / n_itens_com_chunk_ouro_no_corpus` | `null` se `n_itens_com_chunk_ouro_no_corpus == 0` |
 | `n_itens_com_chunk_ouro_no_corpus` | Itens com `corpus_tem_chunk_ouro == true` | — |
 | `media_rank_chunk_ouro_quando_presente` | Média de `rank_chunk_ouro` onde não é `null` (ouro encontrado no top-k) | `null` se nenhum rank disponível |
+| `n_itens_corpus_sem_distratores` | Itens cujo corpus só tinha a passagem ouro | Ausente em corridas anteriores a este campo |
+| `nota_taxa_degenerada` | Qualifica `taxa_chunk_ouro_no_top_k` quando parte ou todos os itens não tinham distratores | Ausente quando todos têm distratores |
 
 **Notas:**
 
