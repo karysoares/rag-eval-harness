@@ -28,6 +28,11 @@ import time
 from pathlib import Path
 from typing import Any
 
+from dotenv import load_dotenv
+
+from llm_evaluation.config import load_config
+from llm_evaluation.pipeline import run_batch
+from llm_evaluation.reporting import record_to_json
 from llm_evaluation.retrieval_eval.bm25 import BM25Index
 from llm_evaluation.retrieval_eval.ponte import (
     ConjuntoPonte,
@@ -35,6 +40,9 @@ from llm_evaluation.retrieval_eval.ponte import (
     cobertura_da_recuperacao,
     itens_para_pipeline,
 )
+from llm_evaluation.statistics import mcnemar_test, paired_bootstrap_diff_ci
+from llm_evaluation.types import RunRecord
+from llm_evaluation.verification.aggregate import judge_negative_for_aggregation
 
 CACHE = Path(".cache/ponte_hotpotqa.pkl")
 
@@ -66,14 +74,71 @@ def _conjunto(args: argparse.Namespace) -> ConjuntoPonte:
     return c
 
 
+def _sustentado(registo: RunRecord, vereditos_negativos: list[str]) -> bool | None:
+    """True se o juiz considerou a resposta sustentada; None quando não é medível.
+
+    None em dois casos que **não** são resultados do sistema: o item falhou por
+    erro de execução, ou o juiz caiu no fallback heurístico — que responde
+    sempre `sustentado` e tornaria um juiz avariado indistinguível de um juiz
+    permissivo.
+    """
+    if registo.meta.get("processing_error"):
+        return None
+    juiz = registo.signals.judge
+    if juiz is None or juiz.raw.get("fallback_heuristico"):
+        return None
+    return not judge_negative_for_aggregation(registo.signals, vereditos_negativos)
+
+
+def _compara(
+    a: dict[str, bool],
+    b: dict[str, bool],
+    *,
+    nome_a: str,
+    nome_b: str,
+) -> dict[str, Any]:
+    """McNemar mais bootstrap sobre os itens comuns aos dois braços.
+
+    Emparelhado por construção: os braços correm sobre os mesmos ids. Um teste
+    de duas proporções sobrestimaria o erro-padrão e perderia poder.
+    """
+    comuns = sorted(set(a) & set(b))
+    va = [a[i] for i in comuns]
+    vb = [b[i] for i in comuns]
+    # b = sustentado só em A; c = sustentado só em B.
+    disc_b = sum(1 for x, y in zip(va, vb, strict=True) if x and not y)
+    disc_c = sum(1 for x, y in zip(va, vb, strict=True) if y and not x)
+    return {
+        "par": [nome_a, nome_b],
+        "n_comuns": len(comuns),
+        "n_excluidos_a": len(a) - len(comuns),
+        "n_excluidos_b": len(b) - len(comuns),
+        "taxa_a": round(sum(va) / len(va), 4) if va else None,
+        "taxa_b": round(sum(vb) / len(vb), 4) if vb else None,
+        "mcnemar": mcnemar_test(disc_b, disc_c),
+        "bootstrap": paired_bootstrap_diff_ci(va, vb),
+    }
+
+
 def main() -> None:
+    # Igual ao `llm-eval`: sem isto o script pede a chave que já está no .env.
+    load_dotenv()
+    load_dotenv(Path(__file__).resolve().parents[1] / ".env", override=False)
+
     p = argparse.ArgumentParser()
     p.add_argument("--n-queries", type=int, default=200)
     p.add_argument("--n-distratores", type=int, default=150_000)
     p.add_argument("--seed", type=int, default=42)
     p.add_argument("--recarregar", action="store_true", help="ignora a cache local")
     p.add_argument("--top-k", type=int, default=4, help="passagens entregues ao gerador")
-    p.add_argument("--desvio", type=int, default=50, help="início da janela no braço degradado")
+    p.add_argument(
+        "--desvios",
+        type=int,
+        nargs="+",
+        default=[0, 2, 50],
+        help="início da janela em cada braço; 0 = recuperação normal",
+    )
+    p.add_argument("--config", type=Path, default=Path("configs/hotpotqa_ponte.yaml"))
     p.add_argument("--so-recuperacao", action="store_true", help="pára antes da geração")
     p.add_argument("--saida", type=Path, default=Path("outputs/ablacao"))
     args = p.parse_args()
@@ -93,19 +158,22 @@ def main() -> None:
     print(f"[bm25] indexação {t_indice:.0f}s · {len(corrida)} queries em {t_consulta:.0f}s")
 
     bracos: dict[str, dict[str, Any]] = {}
-    for nome, desvio in (("topo", 0), ("degradado", args.desvio)):
+    itens_por_braco: dict[str, list[Any]] = {}
+    for desvio in args.desvios:
+        nome = f"desvio_{desvio}"
         cob = cobertura_da_recuperacao(conjunto, corrida, top_k=args.top_k, desvio=desvio)
         itens = itens_para_pipeline(conjunto, corrida, top_k=args.top_k, desvio=desvio)
+        itens_por_braco[nome] = itens
         bracos[nome] = {"cobertura": cob, "n_itens": len(itens)}
         acertos = f"{cob['n_com_relevante_na_janela']}/{cob['n_queries']}"
-        print(f"[{nome:<10}] cobertura={cob['cobertura']}  ({acertos})")
+        print(f"[{nome:<12}] cobertura={cob['cobertura']}  ({acertos})")
 
     args.saida.mkdir(parents=True, exist_ok=True)
     relatorio = {
         "conjunto": conjunto.resumo(),
         "parametros": {
             "top_k": args.top_k,
-            "desvio": args.desvio,
+            "desvios": args.desvios,
             "seed": args.seed,
             "n_distratores_corpus": args.n_distratores,
         },
@@ -124,7 +192,66 @@ def main() -> None:
         print("\n--so-recuperacao: parado antes da geração.")
         return
 
-    print("\nGeração ainda não ligada neste script; corra com --so-recuperacao.")
+    cfg = load_config(args.config)
+    negativos = list(cfg.verification.judge_aggregation_verdicts)
+    sustentados: dict[str, dict[str, bool]] = {}
+    for nome, itens in itens_por_braco.items():
+        print(f"\n=== geração: {nome} ({len(itens)} itens) ===")
+        t0 = time.time()
+        dir_braco = args.saida / nome
+        dir_braco.mkdir(parents=True, exist_ok=True)
+        # `run_batch` não escreve artefactos — isso é do CLI. Sem `predictions.jsonl`
+        # a corrida não é auditável e o resultado não é reconferível item a item.
+        with (dir_braco / "predictions.jsonl").open("w", encoding="utf-8") as fh:
+
+            def _escreve(rec: RunRecord, _fh: Any = fh) -> None:
+                _fh.write(json.dumps(record_to_json(rec), ensure_ascii=False) + "\n")
+                _fh.flush()
+
+            registos = run_batch(
+                cfg,
+                itens,
+                on_record=_escreve,
+                run_dir=dir_braco,
+                config_name=str(args.config),
+            )
+        medidos = {r.item_id: _sustentado(r, negativos) for r in registos}
+        sustentados[nome] = {k: v for k, v in medidos.items() if v is not None}
+        excluidos = len(medidos) - len(sustentados[nome])
+        taxa = sum(sustentados[nome].values()) / len(sustentados[nome])
+        bracos[nome]["geracao"] = {
+            "n_medidos": len(sustentados[nome]),
+            "n_excluidos": excluidos,
+            "taxa_sustentado": round(taxa, 4),
+            "segundos": round(time.time() - t0, 1),
+        }
+        print(f"  sustentado={taxa:.3f}  medidos={len(sustentados[nome])}  excluídos={excluidos}")
+
+    nomes = list(sustentados)
+    comparacoes = [
+        _compara(sustentados[a], sustentados[b], nome_a=a, nome_b=b)
+        for i, a in enumerate(nomes)
+        for b in nomes[i + 1 :]
+    ]
+    relatorio["bracos"] = bracos
+    relatorio["comparacoes"] = comparacoes
+    destino.write_text(json.dumps(relatorio, indent=2, ensure_ascii=False), encoding="utf-8")
+
+    print("\n=== COMPARAÇÕES EMPARELHADAS ===")
+    for c in comparacoes:
+        boot = c["bootstrap"] or {}
+        mac = c["mcnemar"] or {}
+        exclui_zero = boot and (boot["ic_inferior"] > 0 or boot["ic_superior"] < 0)
+        marca = "SIGNIFICATIVO" if exclui_zero else "não distinguível de ruído"
+        print(
+            f"  {c['par'][0]} vs {c['par'][1]}: "
+            f"{c['taxa_a']} vs {c['taxa_b']}  "
+            f"dif={boot.get('diferenca_observada', float('nan')):+.4f} "
+            f"IC95=[{boot.get('ic_inferior', float('nan')):+.4f},"
+            f"{boot.get('ic_superior', float('nan')):+.4f}]  "
+            f"p={mac.get('p_valor', float('nan')):.4g}  {marca}"
+        )
+    print(f"\n[escrito] {destino}")
 
 
 if __name__ == "__main__":

@@ -32,6 +32,18 @@ _RESPONDER_INVALID_ANSWER_PT = (
 )
 
 
+def _prompt_files(style: PromptStyle) -> tuple[str, str]:
+    """Ficheiros de system e user para o estilo pedido.
+
+    `generic` não nomeia domínio nem língua da fonte: é o que permite correr o
+    mesmo pipeline sobre outro corpus sem dizer ao gerador que responde sobre
+    contos infantis.
+    """
+    if style == "generic":
+        return "responder_generic_system.txt", "responder_generic_user_template.txt"
+    return "responder_system.txt", "responder_user_template.txt"
+
+
 def _tpl(name: str) -> str:
     return load_prompt_text(name)
 
@@ -77,14 +89,14 @@ def generate_answer(
     max_parse_retries: int = 1,
 ) -> tuple[str, dict[str, Any]]:
     """Gera resposta RAG com saída JSON validada; devolve texto e meta de qualidade."""
-    del prompt_style  # único estilo suportado (FairytaleQA pt-BR)
+    sistema, modelo_utilizador = _prompt_files(prompt_style)
     if not rag_enabled or not retrieved:
         ctx = "(nenhum contexto recuperado)"
         hints = "Sem chunks recuperados."
     else:
         ctx = format_context(retrieved)
         hints = format_retrieval_hints(retrieved)
-    user = _tpl("responder_user_template.txt").format(
+    user = _tpl(modelo_utilizador).format(
         context=ctx,
         retrieval_hints=hints,
         question=item.question,
@@ -96,7 +108,7 @@ def generate_answer(
             + "EVITE RECUSA GENÉRICA. Responda em 1 frase curta, factual e "
             + "com palavras do contexto quando possível."
         )
-    system = _tpl("responder_system.txt")
+    system = _tpl(sistema)
 
     try:
         validated, _raw, parse_meta = call_validate_with_retries(

@@ -2,7 +2,7 @@
 
 - **Estado:** implemented (BM25, denso, híbrido, cross-encoder)
 - **Testes:** `tests/test_retrieval_eval.py`
-- **Relacionado:** [SPEC-001](001-retrieval.md) (recuperação no pipeline), [SPEC-002](002-grounding.md) (grounding sobre o contexto recuperado)
+- **Relacionado:** [SPEC-001](001-retrieval.md) (recuperação no pipeline), [SPEC-002](002-grounding.md) (grounding sobre o contexto recuperado), [SPEC-013](013-retrieval-generation-bridge.md) (efeito da recuperação na geração)
 
 ## Objetivo
 
@@ -140,4 +140,4 @@ sem o teste emparelhado teria publicado uma ordenação a partir de ruído.
 - [x] Testes offline e determinísticos, sem rede.
 - [x] Cross-encoder como quarto degrau, com custo e latência ao lado.
 - [x] Comparações com teste emparelhado; ordenação escrita só onde o IC exclui zero.
-- [ ] Ligar recuperação real à geração no mesmo item (conjunto ponte por escolher).
+- [x] Ligar recuperação real à geração no mesmo item — [SPEC-013](013-retrieval-generation-bridge.md).

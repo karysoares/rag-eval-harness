@@ -45,6 +45,8 @@ def load_prompt(name: str) -> str:
 
 
 def _prompt_files(style: JudgePromptStyle) -> tuple[str, str]:
+    if style == "generic":
+        return "judge_generic_system.txt", "judge_generic_user_template.txt"
     if style == "rag_pt":
         return "judge_rag_pt_system.txt", "judge_rag_pt_user_template.txt"
     return "judge_system.txt", "judge_user_template.txt"
