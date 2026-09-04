@@ -5,6 +5,13 @@
 - **Relacionado:** [SPEC-002](002-grounding.md) (camada embedding paralela), [SPEC-004](004-aggregation.md) (`juiz_negativo`, fallback excluído), [SPEC-005](005-reporting.md) (`sumario_juiz`), [SPEC-006](006-dashboard.md), [SPEC-007](007-pattern-detection.md) (`juiz_fallback`, `juiz_negativo`), [SPEC-010](010-judge-meta-evaluation.md) (o juiz como instrumento: calibração, viés, auto-consistência)
 
 ## Objetivo
+> **Configs não distribuídos.** O repositório público inclui apenas os configs do caso
+> de referência FairytaleQA pt-BR. As menções a `configs/nq_open*.yaml`,
+> `configs/legacy_truthfulqa.yaml` e `configs/smoke_demo.yaml` descrevem o protocolo com
+> que o adaptador foi validado e servem de referência para reconstruir um equivalente —
+> ver [`adapters/natural-questions.md`](adapters/natural-questions.md) e
+> `configs/default.yaml` como modelo.
+
 
 Avaliar a **aderência da resposta ao contexto recuperado** com veredito estruturado JSON (temperatura 0). O juiz é camada **complementar** à detecção determinística ([SPEC-007](007-pattern-detection.md)) e ao proxy por coseno ([SPEC-002](002-grounding.md)); **não** substitui F1 token nem listas correct/incorrect do adaptador.
 

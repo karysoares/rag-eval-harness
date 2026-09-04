@@ -119,10 +119,38 @@ def cosine_topk(query_vec: np.ndarray, doc_vecs: np.ndarray, k: int) -> list[tup
 
 
 class Retriever:
-    def __init__(self, embedder: Embedder, chunks: list[str]) -> None:
+    """Recuperação densa sobre o corpus de um item.
+
+    ``gold_flags`` traz a **proveniência** de cada chunk, vinda de
+    ``datasets_rag.build_corpus_for_item``. Sem ela, cai-se na marcação por
+    substring, que erra em dois casos reais: passagem ouro curta contida num
+    distractor (marca o distractor como ouro) e corpus sem distratores (marca
+    tudo como ouro, tornando ``rank_chunk_ouro`` constante). O modo substring
+    fica só para chamadores antigos que não têm a proveniência à mão.
+    """
+
+    def __init__(
+        self,
+        embedder: Embedder,
+        chunks: list[str],
+        *,
+        gold_flags: list[bool] | None = None,
+    ) -> None:
+        if gold_flags is not None and len(gold_flags) != len(chunks):
+            msg = f"gold_flags ({len(gold_flags)}) tem de acompanhar chunks ({len(chunks)})"
+            raise ValueError(msg)
         self._embedder = embedder
         self._chunks = chunks
+        self._gold_flags = gold_flags
         self._vecs = embedder.embed(chunks) if chunks else np.zeros((0, 128), dtype=np.float32)
+
+    def _is_gold(self, index: int, item: EvalItem) -> bool:
+        if self._gold_flags is not None:
+            return self._gold_flags[index]
+        gchunk = item.rag_gold_chunk
+        gs = gchunk.strip() if gchunk else ""
+        text = self._chunks[index]
+        return bool(gs) and (gs in text or text in gs)
 
     def retrieve(
         self,
@@ -139,11 +167,9 @@ class Retriever:
         pairs = cosine_topk(qv, self._vecs, min(top_k, len(self._chunks)))
         out: list[RetrievedChunk] = []
         for i, score in pairs:
-            text = self._chunks[i]
-            gchunk = item.rag_gold_chunk
-            gs = gchunk.strip() if gchunk else ""
-            is_gold = bool(gs) and (gs in text or text in gs)
-            out.append(RetrievedChunk(text=text, score=score, is_gold=is_gold))
+            out.append(
+                RetrievedChunk(text=self._chunks[i], score=score, is_gold=self._is_gold(i, item)),
+            )
 
         if inject_remove_gold and item.rag_gold_chunk:
             out = [c for c in out if not c.is_gold]
@@ -151,12 +177,9 @@ class Retriever:
             if len(out) < top_k:
                 all_pairs = cosine_topk(qv, self._vecs, min(len(self._chunks), top_k + 5))
                 for j, score in all_pairs:
-                    text = self._chunks[j]
-                    gchunk = item.rag_gold_chunk
-                    gs = gchunk.strip() if gchunk else ""
-                    is_gold = bool(gs) and (gs in text or text in gs)
-                    if is_gold:
+                    if self._is_gold(j, item):
                         continue
+                    text = self._chunks[j]
                     if any(x.text == text for x in out):
                         continue
                     out.append(RetrievedChunk(text=text, score=score, is_gold=False))

@@ -117,12 +117,31 @@ def _protocol_f1_fraca_min(protocol: dict[str, object] | None) -> float:
     return settings.f1_fraca_min
 
 
+def _tem_erro_execucao(record: RunRecord) -> bool:
+    return isinstance(record.meta.get("processing_error"), dict)
+
+
+NOTA_EXCLUSAO_ERRO_EXECUCAO = (
+    "Itens com meta.processing_error estão fora de todos os denominadores deste "
+    "sumário. _failed_record marca flag_anomalia=True para o item ir à fila "
+    "operacional; contá-lo como anomalia mediria a infraestrutura (quota, rede) e "
+    "não o sistema avaliado. n_itens é o total recebido; n_itens_avaliados é o "
+    "denominador efectivo."
+)
+
+
 def summarize(
     records: list[RunRecord],
     *,
     reference_type: str = "answer_lists",
     protocol: dict[str, object] | None = None,
 ) -> dict[str, object]:
+    n_recebidos = len(records)
+    falhados = [r for r in records if _tem_erro_execucao(r)]
+    # Rebind deliberado: todo o cálculo abaixo — incluindo os sumários aninhados,
+    # que fecham sobre este nome — passa a correr só sobre itens efectivamente
+    # avaliados. Filtrar caso a caso deixaria sempre um denominador por trás.
+    records = [r for r in records if not _tem_erro_execucao(r)]
     n = len(records)
     f1_min = _protocol_f1_fraca_min(protocol)
     gold_incorrect = [
@@ -557,7 +576,10 @@ def summarize(
         },
         "sumario_operacional": op_sum,
         "taxa_alerta": (len(flagged) / n) if n else None,
-        "n_itens": n,
+        "n_itens": n_recebidos,
+        "n_itens_avaliados": n,
+        "n_itens_com_erro_execucao": len(falhados),
+        "nota_exclusao": NOTA_EXCLUSAO_ERRO_EXECUCAO,
         "n_com_gold_para_confusao": len(labeled),
         "n_sem_rotulo_gold": n_unlabeled_gold,
         "n_anomalias_marcadas": len(flagged),

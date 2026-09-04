@@ -5,6 +5,13 @@
 - **Relacionado:** [SPEC-001](001-retrieval.md) (chunks e embedder partilhados), [SPEC-004](004-aggregation.md) (`embedding_baixo_suporte` na política), [SPEC-007](007-pattern-detection.md) (`grounding_baixo`, `grounding_fp_suspeito`)
 
 ## Objetivo
+> **Configs não distribuídos.** O repositório público inclui apenas os configs do caso
+> de referência FairytaleQA pt-BR. As menções a `configs/nq_open*.yaml`,
+> `configs/legacy_truthfulqa.yaml` e `configs/smoke_demo.yaml` descrevem o protocolo com
+> que o adaptador foi validado e servem de referência para reconstruir um equivalente —
+> ver [`adapters/natural-questions.md`](adapters/natural-questions.md) e
+> `configs/default.yaml` como modelo.
+
 
 Sinalizar respostas com **baixa sobreposição semântica** (proxy por coseno) face ao contexto **utilizável**: chunks **recuperados** no top-k e, opcionalmente, a passagem gold do adaptador (`rag_gold_chunk`). Não é NLI nem RAGAS; é camada diagnóstica reprodutível no harness, independente do adaptador.
 
@@ -282,7 +289,7 @@ Inclui `"embedding"` se `protocolo_ativo.verify_embedding` no snapshot da corrid
 
 - [x] Segmentação documentada e implementada em `embedding_verify.split_sentences` + teste de intervalo em `test_embedding_verify.py`.
 - [x] Tabela `null` / `0.0` / float alinhada a `pipeline.verify_item` e `protocol.py`; teste sem corpus em `test_verify_embedding_na.py`.
-- [x] Com `rag_gold_chunk` e `embedding_use_gold_chunk: true`, score ouro em `embedding_max_coseno_ouro` entra no máximo (`pipeline.verify_item`).
+- [x] Com `rag_gold_chunk` e `embedding_use_gold_chunk: true`, o score ouro é registado em `embedding_max_coseno_ouro` como **diagnóstico** e **não** entra no máximo que decide `embedding_baixo_suporte` (`pipeline.verify_item`). Antes entrava: uma resposta próxima da referência saía bem ancorada mesmo sem contexto recuperado, misturando o plano de grounding com o plano de referência ([CLAUDE.md](../../CLAUDE.md), regra 8). `protocolo_ativo.embedding_grounding_source` declara a fonte efectiva; corridas anteriores a esta correcção não são comparáveis neste sinal.
 - [x] NQ-Open sem corpus: embedding inactivo ou `null` (`configs/nq_open.yaml` + protocolo).
 - [x] Decomposição `embedding_max_coseno_recuperados` / `_ouro` no JSONL (`aggregate.signals_to_dict`).
 - [x] Agregação em `analise_camadas` e estratificação FP (`reporting.summarize`, `evaluation_metrics.layer_analysis`).
