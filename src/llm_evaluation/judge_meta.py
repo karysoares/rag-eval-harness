@@ -155,6 +155,16 @@ def _judged(records: list[RunRecord]) -> list[RunRecord]:
     ]
 
 
+def _n_saltados_por_gate(records: list[RunRecord]) -> int:
+    """Itens em que o gate de embedding dispensou o juiz."""
+    n = 0
+    for r in records:
+        ctx = r.meta.get("contexto_juiz")
+        if isinstance(ctx, dict) and ctx.get("judge_skipped_by_gate"):
+            n += 1
+    return n
+
+
 def _aprovou(record: RunRecord, polarity: JudgePolarity) -> bool:
     judge = record.signals.judge
     return judge is not None and polarity.aprovou(judge.veredito)
@@ -448,6 +458,18 @@ def build_judge_meta_report(
         "vies_verbosidade": judge_verbosity_bias(records, polarity=polarity),
         "vies_posicao": judge_position_bias(records, polarity=polarity),
     }
+    n_gate = _n_saltados_por_gate(records)
+    if n_gate:
+        # O gate salta o juiz quando o embedding já está alto, portanto o
+        # subconjunto julgado deixa de ser aleatório: passa a ser condicionado a
+        # embedding baixo. κ, ECE e as sondas de viés abaixo descrevem o juiz
+        # nessa faixa, não em geral — e sem esta contagem pareceriam globais.
+        relatorio["n_itens_saltados_por_gate"] = n_gate
+        relatorio["nota_condicionalidade"] = (
+            f"{n_gate} itens não foram julgados por gate de embedding. As métricas "
+            "deste relatório são condicionais ao subconjunto julgado (embedding "
+            "abaixo do limiar do gate) e não se generalizam à corrida inteira."
+        )
     if amostras_autoconsistencia:
         relatorio["autoconsistencia"] = self_consistency(amostras_autoconsistencia)
     return relatorio

@@ -34,6 +34,8 @@ Cada spec é a **fonte de verdade** do comportamento. Implementação e testes d
 | 009 | [Explicabilidade](009-explicabilidade.md) | implemented |
 | 010 | [Meta-avaliação do juiz](010-judge-meta-evaluation.md) | implemented |
 | 011 | [Telemetria](011-telemetry.md) | implemented |
+| 012 | [Avaliação de recuperação](012-retrieval-evaluation.md) | implemented |
+| 013 | [Ponte recuperação → geração](013-retrieval-generation-bridge.md) | implemented |
 | A-NQ | [Adaptador Natural Questions](adapters/natural-questions.md) | implemented |
 
 ## Mapa de dependências
@@ -46,6 +48,9 @@ flowchart TB
   A003 --> A010[010 Judge meta-eval]
   A008[008 HITL] --> A010
   A005 --> A011[011 Telemetria]
+  A001 --> A012[012 Retrieval eval]
+  A012 --> A013[013 Ponte recuperação-geração]
+  A002 --> A013
   A007[007 Patterns] --> A005[005 Reporting]
   A005 --> A006[006 Dashboard]
   A004 --> A005

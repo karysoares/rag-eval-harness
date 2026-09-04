@@ -4,6 +4,13 @@
 - **Testes:** `tests/test_retrieval_metrics.py`, `tests/test_retrieval.py`, `tests/test_pattern_detection.py` (`recuperacao_falhou`), `tests/test_pipeline_e2e_mock.py` (gate fraca)
 
 ## Objetivo
+> **Configs não distribuídos.** O repositório público inclui apenas os configs do caso
+> de referência FairytaleQA pt-BR. As menções a `configs/nq_open*.yaml`,
+> `configs/legacy_truthfulqa.yaml` e `configs/smoke_demo.yaml` descrevem o protocolo com
+> que o adaptador foi validado e servem de referência para reconstruir um equivalente —
+> ver [`adapters/natural-questions.md`](adapters/natural-questions.md) e
+> `configs/default.yaml` como modelo.
+
 
 Medir qualidade do retriever **antes** da geração, sem misturar com anomalia agregada por defeito (`docs/PREMISSAS.md`: ramo de recuperação é **diagnóstico**; não alimenta `flag_anomalia` excepto via gate de geração — ver [SPEC-004](004-aggregation.md)).
 
@@ -24,6 +31,10 @@ Medir qualidade do retriever **antes** da geração, sem misturar com anomalia a
 | `rank_chunk_ouro` | int \| null | Posição **1-indexed** do primeiro chunk com `is_gold` |
 | `chunk_ouro_no_top_k` | bool | `rank_chunk_ouro is not None` |
 | `corpus_tem_chunk_ouro` | bool | `bool((item.rag_gold_chunk or "").strip())` |
+| `n_chunks_corpus` | int | Tamanho do universo de busca do item |
+| `corpus_devolvido_inteiro` | bool | `n_chunks_recuperados >= n_chunks_corpus`: o retriever ordenou, não seleccionou |
+| `corpus_tem_distratores` | bool | `false` ⇒ «ouro no top-k» só pode dar verdadeiro |
+
 
 ## Semântica dos scores
 
@@ -44,6 +55,8 @@ Calculadas em `reporting.summarize()` → `_retrieval_summary()`: percorre todos
 | `taxa_chunk_ouro_no_top_k` | `count(chunk_ouro_no_top_k) / n_itens_com_chunk_ouro_no_corpus` | `null` se `n_itens_com_chunk_ouro_no_corpus == 0` |
 | `n_itens_com_chunk_ouro_no_corpus` | Itens com `corpus_tem_chunk_ouro == true` | — |
 | `media_rank_chunk_ouro_quando_presente` | Média de `rank_chunk_ouro` onde não é `null` (ouro encontrado no top-k) | `null` se nenhum rank disponível |
+| `n_itens_corpus_sem_distratores` | Itens cujo corpus só tinha a passagem ouro | Ausente em corridas anteriores a este campo |
+| `nota_taxa_degenerada` | Qualifica `taxa_chunk_ouro_no_top_k` quando parte ou todos os itens não tinham distratores | Ausente quando todos têm distratores |
 
 **Notas:**
 
@@ -62,7 +75,11 @@ Independente de `sumario_recuperacao`: `n_geracoes_curadas_recuperacao_fraca` co
 
 ### Marcação de chunk ouro
 
-Em `Retriever.retrieve`, `is_gold` é `true` quando o texto do chunk e `item.rag_gold_chunk` (após strip) se intersectam por substring (`ouro in chunk` ou `chunk in ouro`). Com `rag.inject_retrieval_failure: true`, chunks ouro são removidos da lista devolvida — métricas reflectem o top-k **pós-injeção**.
+`is_gold` vem da **proveniência** registada em `datasets_rag.build_corpus_for_item`: o chunk saiu de `item.rag_gold_chunk` ou de um distractor. O pipeline passa essas flags ao `Retriever` (`gold_flags`); sem elas, o retriever cai no modo substring histórico (`ouro in chunk` ou `chunk in ouro`), mantido só para chamadores que não têm a proveniência à mão.
+
+A substring errava em dois casos reais: passagem ouro **curta** contida num distractor (marcava o distractor como ouro) e corpus **sem distratores** (marcava tudo como ouro, fixando `rank_chunk_ouro` em 1 e tornando `taxa_chunk_ouro_no_top_k` constante em 1,0 sem que o artefacto o dissesse).
+
+Com `rag.inject_retrieval_failure: true`, chunks ouro são removidos da lista devolvida — métricas reflectem o top-k **pós-injeção**. Num corpus sem distratores isso esvazia a lista: mede-se «sem contexto», não «contexto errado».
 
 ### Gate de recuperação fraca (ligação [SPEC-004](004-aggregation.md) / geração)
 

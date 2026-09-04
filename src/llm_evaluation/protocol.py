@@ -164,7 +164,14 @@ def build_protocolo_ativo(cfg: AppConfig) -> dict[str, object]:
         "verify_judge": cfg.verification.verify_judge,
         "aggregation_policy": cfg.aggregation.policy,
         "orchestration": cfg.orchestration,
+        # Diz apenas se a similaridade resposta↔passagem ouro é **registada** como
+        # diagnóstico; o grounding decisório nunca a usa (ver embedding_grounding_source).
         "embedding_use_gold_chunk": cfg.verification.embedding_use_gold_chunk,
+        # Explícito no artefacto porque a semântica mudou: até à correcção da
+        # contaminação de planos, o ouro entrava no máximo que decidia
+        # `embedding_baixo_suporte`. Uma corrida antiga e uma nova não são
+        # comparáveis neste sinal, e o campo torna isso legível sem arqueologia.
+        "embedding_grounding_source": "chunks_recuperados",
         "embedding_min_cosine": cfg.verification.embedding_min_cosine,
         "judge_prompt_style": cfg.verification.judge_prompt_style,
         # Necessário para reproduzir o prompt exacto do juiz (ex.: amostragem de

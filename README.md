@@ -2,7 +2,8 @@
 
 # rag-eval-harness
 
-**A reproducible harness for evaluating RAG + LLM pipelines** — retrieval, generation, grounding, LLM judge and deterministic patterns, with an offline dashboard and auditable artifacts.
+**A reproducible harness for evaluating RAG + LLM pipelines — and for evaluating the judge that evaluates them.**
+Retrieval, generation, grounding, LLM-as-judge with calibration and bias probes, paired statistics, and auditable artifacts.
 
 [![CI](https://github.com/karysoares/rag-eval-harness/actions/workflows/ci.yml/badge.svg)](https://github.com/karysoares/rag-eval-harness/actions/workflows/ci.yml)
 [![Python 3.11+](https://img.shields.io/badge/python-3.11%2B-blue.svg)](https://www.python.org/downloads/)
@@ -17,7 +18,20 @@
 
 ## Overview
 
-A **corpus-agnostic** evaluation harness: every dataset is an adapter, and the core measures retrieval, generation and verification as independent layers. The bundled reference case is **FairytaleQA pt-BR** ([`benjleite/FairytaleQA-translated-ptBR`](https://huggingface.co/datasets/benjleite/FairytaleQA-translated-ptBR)).
+Most RAG evaluation tools score the answer. This one also scores **the thing doing the scoring** — because an LLM judge is an instrument, and an instrument that nobody characterised produces numbers nobody should act on.
+
+Four judges over the same 200 items, measured with the harness itself:
+
+| judge | accuracy | κ | ECE | mean confidence | s/item |
+|---|---|---|---|---|---|
+| `gpt-4o` | 0.561 | −0.028 | 0.421 | 0.982 | 11.7 |
+| `gpt-4o-mini` | 0.575 | −0.006 | 0.399 | 0.974 | 3.0 |
+| `gpt-5.4-nano` | **0.610** | 0.092 | **0.296** | 0.906 | **2.5** |
+| `qwen2.5` (local, free) | 0.585 | **0.190** | 0.366 | 0.911 | 33.7 |
+
+Every one of them declares 0.91–0.98 confidence while being right 56–61% of the time, so none can be used for confidence-based triage. The most expensive is last on every column. The free local model discriminates best. None of that is visible from an accuracy score alone — [see how it is measured](#judge-meta-evaluation).
+
+Underneath is a **corpus-agnostic** harness: every dataset is an adapter, and the core measures retrieval, generation and verification as independent layers. The bundled reference case is **FairytaleQA pt-BR** ([`benjleite/FairytaleQA-translated-ptBR`](https://huggingface.co/datasets/benjleite/FairytaleQA-translated-ptBR)).
 
 | Layer | Role |
 |-------|------|
