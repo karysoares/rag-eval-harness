@@ -13,6 +13,19 @@ from llm_evaluation.fila_revisao import select_fila_records
 from llm_evaluation.hitl_io import export_hitl_csv_template
 
 
+def _referencias(record: object) -> list[str]:
+    """Respostas de referência do dataset, onde o registo as tiver guardado."""
+    meta = getattr(record, "meta", {}) or {}
+    for chave in ("respostas_referencia", "correct_answers", "gold_answers"):
+        valor = meta.get(chave)
+        if isinstance(valor, list) and valor:
+            return [str(x) for x in valor]
+    lex = meta.get("lexical") or meta.get("metricas_lexicas") or {}
+    if isinstance(lex, dict) and lex.get("texto_referencia"):
+        return [str(lex["texto_referencia"])]
+    return []
+
+
 def main() -> None:
     p = argparse.ArgumentParser()
     p.add_argument("run_dir", type=Path)
@@ -40,9 +53,27 @@ def main() -> None:
     ids = ids_fila + [r.item_id for r in sample_rand]
     ids = ids[: args.n]
 
+    por_id = {r.item_id: r for r in records}
+    contexto: dict[str, dict[str, str]] = {}
+    for iid in ids:
+        r = por_id.get(iid)
+        if r is None:
+            continue
+        trechos = [c.text for c in r.retrieved][:3]
+        contexto[iid] = {
+            "pergunta": r.question,
+            "resposta_modelo": r.answer,
+            # A referência do dataset ajuda a decidir, mas não decide: o que se
+            # julga é se a resposta se sustenta no contexto, não se coincide com
+            # a string de referência. Por isso vai como coluna de leitura e não
+            # como veredito sugerido.
+            "referencia": " | ".join(str(x) for x in _referencias(r))[:600],
+            "contexto_recuperado": "\n---\n".join(trechos)[:2000],
+        }
+
     out = run_dir / "analise_manual" / "adjudicacoes_hitl_template.csv"
-    export_hitl_csv_template(out, ids)
-    print(f"Template: {out} ({len(ids)} itens)")
+    export_hitl_csv_template(out, ids, contexto=contexto)
+    print(f"Template: {out} ({len(ids)} itens, {len(ids_fila)} vindos da fila de revisão)")
 
 
 if __name__ == "__main__":
