@@ -6,8 +6,8 @@ from typing import Any
 
 PREDICTIONS_SCHEMA_VERSION = "1.1"
 PREDICTIONS_SCHEMA_VERSIONS_OK = frozenset({"1.0", "1.1"})
-SUMMARY_SCHEMA_VERSION = "1.1"
-SUMMARY_SCHEMA_VERSIONS_OK = frozenset({"1.0", "1.1"})
+SUMMARY_SCHEMA_VERSION = "1.2"
+SUMMARY_SCHEMA_VERSIONS_OK = frozenset({"1.0", "1.1", "1.2"})
 MANIFEST_SCHEMA_VERSION = "1.0"
 
 # Campos de topo em cada linha de predictions.jsonl (v1.0).
@@ -60,6 +60,9 @@ KNOWN_SUMMARY_TOP_FIELDS = frozenset(
         "detector_activo",
         "taxa_alerta",
         "n_itens",
+        "n_itens_avaliados",
+        "n_itens_com_erro_execucao",
+        "nota_exclusao",
         "n_com_gold_para_confusao",
         "n_sem_rotulo_gold",
         "n_anomalias_marcadas",
@@ -121,7 +124,12 @@ MIGRATION_NOTES: dict[str, str] = {
     ),
     "summary": (
         "v1.0→v1.1: schema_version incrementado; campos KPI inalterados. "
-        "fila_revisao_csv passa a path relativo ao run_dir. v1.0 continua legível."
+        "fila_revisao_csv passa a path relativo ao run_dir. v1.0 continua legível. "
+        "v1.1→v1.2: itens com processing_error saem de todos os denominadores "
+        "(CLAUDE.md regra 3). n_itens continua a ser o total recebido; "
+        "n_itens_avaliados é o denominador efectivo e n_itens_com_erro_execucao "
+        "a diferença. taxa_alerta de v1.1 e anterior não é comparável com v1.2 "
+        "em corridas que tiveram falhas de execução."
     ),
     "manifest": "v1.0: manifest.json opcional; ausência não invalida corridas antigas.",
 }

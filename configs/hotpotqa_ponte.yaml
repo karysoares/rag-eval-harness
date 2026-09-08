@@ -1,0 +1,110 @@
+# Ponte recuperação → geração sobre o HotpotQA (SPEC-013).
+#
+# Os itens NÃO vêm de `load_eval_items`: são construídos por
+# `scripts/ablacao_recuperacao.py` a partir de uma corrida de recuperação real
+# sobre um índice BM25 de 150k passagens. O bloco `dataset` abaixo existe para
+# proveniência e para o relatório — não é lido para carregar itens.
+#
+# Uso:
+#   uv run python scripts/ablacao_recuperacao.py --n-queries 100
+#
+# Requer JUDGE_MODEL distinto de LLM_MODEL no .env.
+
+seed: 42
+orchestration: unico
+output_dir: outputs/ablacao
+
+dataset:
+  name: hotpotqa_ponte
+  subset: distractor
+  split: validation
+  # Respostas curtas e factuais (spans), logo F1 de tokens e exact match são
+  # referências adequadas — ao contrário de respostas longas, onde a
+  # sobreposição léxica mede sobretudo comprimento.
+  reference_type: lexical
+  hf_repo: mteb/hotpotqa
+  hf_subset: null
+  question_column: question
+  answer_column: answer
+  context_column: null
+  incorrect_column: null
+  id_column: id
+  limit: 0
+  mode: hub
+  shuffle: false
+
+rag:
+  enabled: true
+  # Igual à janela da ablação: o contexto entregue ao gerador é exactamente o
+  # que a recuperação produziu, sem re-filtrar.
+  top_k: 4
+  inject_retrieval_failure: false
+  chunk_max_chars: 1200
+  # Sem porta de recuperação: o braço degradado TEM de chegar ao gerador com
+  # contexto mau. Cortá-lo aqui mediria a porta, não a geração.
+  min_score_recuperacao: null
+
+embeddings:
+  backend: sentence_transformers
+  # Treinado para recuperação em inglês. O `paraphrase-multilingual` do pipeline
+  # pt-BR não acrescenta nada sobre BM25 em inglês (0,2323 vs 0,2322 no FIQA) —
+  # medido na SPEC-012.
+  model_name: sentence-transformers/all-MiniLM-L6-v2
+
+generation:
+  temperature: 0.0
+  max_tokens: 300
+  # Agnóstico ao corpus. O `rag_pt` diz ao gerador que responde sobre contos
+  # infantis em português, o que sobre a Wikipédia em inglês seria um confundidor.
+  prompt_style: generic
+  skip_llm_on_weak_retrieval: false
+  # Desligado: repara recusas quando a recuperação é forte, o que actuaria de
+  # forma diferente nos dois braços e contaminaria exactamente a comparação.
+  anti_refusal_repair: false
+
+verification:
+  verify_gold: false
+  verify_embedding: true
+  verify_judge: true
+  embedding_min_cosine: 0.24
+  judge_prompt_style: generic
+  judge_return_chain_of_thought: false
+  judge_max_context_chars: 12000
+  judge_max_parse_retries: 2
+  negative_judge_verdicts:
+    - nao_sustentado
+    - contradicacao
+    - inseguro
+    - incompleto
+  judge_aggregation_verdicts:
+    - nao_sustentado
+    - contradicacao
+    - inseguro
+
+llm:
+  timeout_seconds: 60
+  concurrency: 4
+
+aggregation:
+  # Duas camadas independentes têm de concordar para marcar anomalia. Com uma
+  # só, o embedding sozinho marcaria respostas curtas correctas (coseno ≠
+  # entailment) e o juiz sozinho carregaria todo o peso da decisão.
+  policy: embedding_e_juiz
+
+baselines:
+  profile: hibrido
+
+metricas_lexicas:
+  habilitado: true
+  f1_token: true
+  bleu: false      # respostas do HotpotQA são spans de 1–5 palavras; BLEU sobre
+  rouge_l: true    # elas mede ruído de comprimento mais do que conteúdo.
+  meteor: false
+  levenshtein: true
+  modo_referencia: primeiro   # o HotpotQA tem uma resposta ouro por item
+
+patterns:
+  referencia_forte:
+    f1_min: 0.65
+  referencia_fraca:
+    f1_min: 0.25

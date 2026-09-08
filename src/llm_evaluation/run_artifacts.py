@@ -98,10 +98,20 @@ def _hash_prompt_file(name: str) -> str | None:
 
 
 def prompt_files_for_config(cfg: AppConfig) -> list[str]:
+    """Prompts efectivamente usados, para hashing na proveniência.
+
+    Tem de acompanhar `generation._prompt_files` e `verification.judge._prompt_files`:
+    hashear o prompt errado dá uma corrida que se diz reproduzível e não é.
+    """
     files: list[str] = []
-    files.extend(["responder_system.txt", "responder_user_template.txt"])
+    if cfg.generation.prompt_style == "generic":
+        files.extend(["responder_generic_system.txt", "responder_generic_user_template.txt"])
+    else:
+        files.extend(["responder_system.txt", "responder_user_template.txt"])
     jps = cfg.verification.judge_prompt_style
-    if jps == "rag_pt":
+    if jps == "generic":
+        files.extend(["judge_generic_system.txt", "judge_generic_user_template.txt"])
+    elif jps == "rag_pt":
         files.extend(["judge_rag_pt_system.txt", "judge_rag_pt_user_template.txt"])
     else:
         files.extend(["judge_system.txt", "judge_user_template.txt"])

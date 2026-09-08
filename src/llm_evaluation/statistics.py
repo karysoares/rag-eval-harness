@@ -264,3 +264,49 @@ def point_biserial(binary: list[bool], continuous: list[float]) -> float | None:
     m0 = sum(grupo0) / len(grupo0)
     p = len(grupo1) / n
     return ((m1 - m0) / desvio) * math.sqrt(p * (1.0 - p))
+
+
+def paired_bootstrap_mean_diff(
+    a: list[float],
+    b: list[float],
+    *,
+    n_resamples: int = 2000,
+    confidence: float = 0.95,
+    seed: int = 20240517,
+) -> dict[str, float | int] | None:
+    """IC bootstrap para a diferença de médias emparelhada em valores contínuos.
+
+    A variante binária (`paired_bootstrap_diff_ci`) serve taxas; esta serve
+    métricas por item que vivem numa escala contínua — nDCG por query, F1 por
+    resposta. Reamostra **itens**, preservando o emparelhamento, e por isso
+    responde à pergunta certa quando dois métodos correm sobre o mesmo conjunto:
+    a diferença é distinguível do ruído, e de que tamanho?
+
+    Comparar duas médias sem isto é publicar um ranking sem saber se ele existe.
+    """
+    if len(a) != len(b) or not a:
+        return None
+    n = len(a)
+    diffs = [x - y for x, y in zip(a, b, strict=True)]
+    observado = sum(diffs) / n
+    rng = random.Random(seed)
+    amostras: list[float] = []
+    for _ in range(n_resamples):
+        total = 0.0
+        for _ in range(n):
+            total += diffs[rng.randrange(n)]
+        amostras.append(total / n)
+    amostras.sort()
+    alpha = (1.0 - confidence) / 2.0
+    lo = amostras[max(0, int(alpha * n_resamples) - 1)]
+    hi = amostras[min(n_resamples - 1, int((1.0 - alpha) * n_resamples))]
+    return {
+        "diferenca_observada": round(observado, 5),
+        "ic_inferior": round(lo, 5),
+        "ic_superior": round(hi, 5),
+        # O IC não conter zero é a condição para afirmar que há diferença.
+        "exclui_zero": bool(lo > 0 or hi < 0),
+        "confianca": confidence,
+        "n_pares": n,
+        "n_reamostragens": n_resamples,
+    }

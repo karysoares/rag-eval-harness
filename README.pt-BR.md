@@ -2,7 +2,8 @@
 
 # rag-eval-harness
 
-**Harness reprodutível para avaliar pipelines RAG + LLM** — recuperação, geração, grounding, juiz LLM e padrões determinísticos, com dashboard offline e artefactos auditáveis.
+**Harness reprodutível para avaliar pipelines RAG + LLM — e para avaliar o juiz que os avalia.**
+Recuperação, geração, grounding, juiz LLM com calibração e sondas de viés, estatística emparelhada e artefactos auditáveis.
 
 [![CI](https://github.com/karysoares/rag-eval-harness/actions/workflows/ci.yml/badge.svg)](https://github.com/karysoares/rag-eval-harness/actions/workflows/ci.yml)
 [![Python 3.11+](https://img.shields.io/badge/python-3.11%2B-blue.svg)](https://www.python.org/downloads/)
@@ -17,7 +18,20 @@
 
 ## Overview
 
-Harness de avaliação **agnóstico ao corpus**: cada dataset é um adaptador; o núcleo mede recuperação, geração e verificação em camadas independentes. O caso de referência incluído é **FairytaleQA pt-BR** ([`benjleite/FairytaleQA-translated-ptBR`](https://huggingface.co/datasets/benjleite/FairytaleQA-translated-ptBR)).
+A maioria das ferramentas de avaliação RAG pontua a resposta. Esta também pontua **quem está a pontuar** — porque um juiz LLM é um instrumento, e um instrumento que ninguém caracterizou produz números sobre os quais ninguém devia decidir.
+
+Quatro juízes sobre os mesmos 200 itens, medidos com o próprio harness:
+
+| juiz | exatidão | κ | ECE | confiança média | s/item |
+|---|---|---|---|---|---|
+| `gpt-4o` | 0,561 | −0,028 | 0,421 | 0,982 | 11,7 |
+| `gpt-4o-mini` | 0,575 | −0,006 | 0,399 | 0,974 | 3,0 |
+| `gpt-5.4-nano` | **0,610** | 0,092 | **0,296** | 0,906 | **2,5** |
+| `qwen2.5` (local, gratuito) | 0,585 | **0,190** | 0,366 | 0,911 | 33,7 |
+
+Todos declaram confiança de 0,91–0,98 acertando 56–61%, portanto nenhum serve para triagem por confiança. O mais caro é último em todas as colunas. O modelo local gratuito é o que melhor discrimina. Nada disto se vê a partir de uma pontuação de exatidão — [ver como é medido](#meta-avaliação-do-juiz).
+
+Por baixo está um harness **agnóstico ao corpus**: cada dataset é um adaptador; o núcleo mede recuperação, geração e verificação em camadas independentes. O caso de referência incluído é **FairytaleQA pt-BR** ([`benjleite/FairytaleQA-translated-ptBR`](https://huggingface.co/datasets/benjleite/FairytaleQA-translated-ptBR)).
 
 | Camada | Papel |
 |--------|--------|

@@ -19,7 +19,7 @@ from typing import Any
 
 from llm_evaluation.config import AppConfig
 from llm_evaluation.critic_schema import CRITIC_SCHEMA_VERSION
-from llm_evaluation.datasets_rag import build_chunks_for_item
+from llm_evaluation.datasets_rag import build_corpus_for_item
 from llm_evaluation.generation import generate_answer
 from llm_evaluation.lexical_metrics import attach_lexical_to_meta
 from llm_evaluation.llm_client import (
@@ -205,22 +205,25 @@ def verify_item(
     thr = cfg.verification.embedding_min_cosine
 
     if cfg.verification.verify_embedding and cfg.rag.enabled:
-        scores: list[float] = []
         if retrieved:
             emb_max_ret = max_cosine_answer_to_chunks(
                 answer,
                 _chunks_texts(retrieved),
                 embedder,
             )
-            scores.append(emb_max_ret)
         gold_text = (item.rag_gold_chunk or "").strip()
         if gold_text and cfg.verification.embedding_use_gold_chunk:
+            # Diagnóstico, **não** entra no grounding: comparar a resposta com a
+            # passagem ouro responde a «parece-se com a referência?», que é o plano
+            # de referência. Misturar os dois num só escalar deixava um sistema que
+            # recupera mal, mas responde perto da referência, passar por bem
+            # ancorado — e induzia correlação entre o preditor e o rótulo na
+            # confusão vs referência (CLAUDE.md, regra 8).
             emb_max_gold = max_cosine_answer_to_chunks(answer, [gold_text], embedder)
-            scores.append(emb_max_gold)
-        if scores:
-            emb_max = max(scores)
+        if emb_max_ret is not None:
+            emb_max = emb_max_ret
             emb_low = emb_max < thr
-        elif had_corpus and not retrieved:
+        elif had_corpus:
             emb_low = True
             emb_max = 0.0
 
@@ -323,8 +326,11 @@ def _run_one_with_resources(
     exporter: TelemetryExporter | None = None,
 ) -> RunRecord:
     item_started_at = time.time()
-    chunks = build_chunks_for_item(item, cfg.rag.chunk_max_chars) if cfg.rag.enabled else []
-    retriever = Retriever(embedder, chunks)
+    corpus = build_corpus_for_item(item, cfg.rag.chunk_max_chars) if cfg.rag.enabled else []
+    chunks = [c.texto for c in corpus]
+    tem_distratores = any(not c.e_ouro for c in corpus) if cfg.rag.enabled else None
+    # A proveniência vem daqui e não de comparação de texto: ver Retriever._is_gold.
+    retriever = Retriever(embedder, chunks, gold_flags=[c.e_ouro for c in corpus])
     retrieved = (
         retriever.retrieve(
             item.question,
@@ -375,6 +381,8 @@ def _run_one_with_resources(
             item,
             retrieved,
             rag_enabled=cfg.rag.enabled,
+            n_chunks_corpus=len(corpus) if cfg.rag.enabled else None,
+            corpus_tem_distratores=tem_distratores,
         ),
         "referencias": [str(a)[:500] for a in item.correct_answers[:20]],
     }
