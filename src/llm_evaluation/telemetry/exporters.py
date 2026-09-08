@@ -22,12 +22,19 @@ from llm_evaluation.telemetry.base import (
     item_attributes,
 )
 
+#: Protege o teste-e-marca de `_warn_once`. Sem ele, dois workers que falham ao
+#: mesmo tempo passam ambos pelo `if` antes de qualquer um marcar, e o aviso sai
+#: duplicado — o único sintoma, mas o padrão é o mesmo que noutros sítios custou
+#: uma corrida de dados.
+_WARN_LOCK = threading.Lock()
+
 
 def _warn_once(state: dict[str, bool], key: str, message: str) -> None:
     """Avisa uma vez por destino: 1000 itens não devem gerar 1000 linhas iguais."""
-    if state.get(key):
-        return
-    state[key] = True
+    with _WARN_LOCK:
+        if state.get(key):
+            return
+        state[key] = True
     print(f"[telemetria] {message}", file=sys.stderr, flush=True)
 
 

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import re
+import threading
 from typing import Any
 
 from rapidfuzz.distance import Levenshtein
@@ -14,8 +15,29 @@ from llm_evaluation.squad_metrics import squad_scores
 from llm_evaluation.types import EvalItem
 from llm_evaluation.verification.gold import normalize_answer
 
-_BLEU = BLEU(effective_order=True)
-_ROUGE = rouge_scorer.RougeScorer(["rougeL"], use_stemmer=False)
+#: Scorers por thread. O loop de itens corre num pool (ver `pipeline.run_batch`)
+#: e nem `sacrebleu` nem `rouge_score` documentam segurança entre threads — o
+#: `BLEU` mantém cache interna de referências. Partilhar uma instância não faria
+#: a corrida rebentar: produziria um número errado atribuído ao item errado, que
+#: num harness de avaliação é o pior modo de falha. Por thread e não por chamada
+#: porque construir um scorer por item é desperdício sem contrapartida.
+_scorers = threading.local()
+
+
+def _bleu() -> BLEU:
+    inst: BLEU | None = getattr(_scorers, "bleu", None)
+    if inst is None:
+        inst = BLEU(effective_order=True)
+        _scorers.bleu = inst
+    return inst
+
+
+def _rouge() -> rouge_scorer.RougeScorer:
+    inst: rouge_scorer.RougeScorer | None = getattr(_scorers, "rouge", None)
+    if inst is None:
+        inst = rouge_scorer.RougeScorer(["rougeL"], use_stemmer=False)
+        _scorers.rouge = inst
+    return inst
 
 
 def pick_reference(
@@ -36,7 +58,7 @@ def pick_reference(
     best_i = 0
     best_f = -1.0
     for i, ref in enumerate(clean):
-        sc = _ROUGE.score(ref, hypothesis)
+        sc = _rouge().score(ref, hypothesis)
         f1 = float(sc["rougeL"].fmeasure)
         if f1 > best_f:
             best_f = f1
@@ -109,12 +131,12 @@ def compute_lexical_scores(
         out.update(squad_scores(hypothesis, correct_answers))
 
     if cfg.bleu:
-        s = _BLEU.sentence_score(hypothesis, [ref])
+        s = _bleu().sentence_score(hypothesis, [ref])
         # sacrebleu devolve score em escala 0–100
         out["bleu"] = float(s.score) / 100.0
 
     if cfg.rouge_l:
-        sc = _ROUGE.score(ref, hypothesis)
+        sc = _rouge().score(ref, hypothesis)
         out["rouge_l_precisao"] = float(sc["rougeL"].precision)
         out["rouge_l_revocacao"] = float(sc["rougeL"].recall)
         out["rouge_l_f"] = float(sc["rougeL"].fmeasure)
