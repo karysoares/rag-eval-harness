@@ -210,6 +210,29 @@ baixa, e a igualdade exacta é impossível.
 Os números léxicos desta corrida **não são publicáveis** e não entram em nenhuma
 conclusão. Corrigir exige um modo de extracção de span no prompt, e é outra corrida.
 
+### Reprodutibilidade: o script não emitia a variável dependente correcta
+
+Até este ponto, `scripts/ablacao_recuperacao.py` só calculava `taxa_sustentado` — o KPI
+ingénuo da secção anterior. As colunas «respondeu», «respondeu e sustentado» e «alucinou»
+publicadas acima tinham sido calculadas à parte, sobre os `predictions.jsonl` já
+gravados, e não eram reconferíveis a partir do código versionado — falha ao critério
+da [regra 5 do `CLAUDE.md`](../../CLAUDE.md): número publicado tem de vir de uma corrida
+gravada **e** de código que a reproduz.
+
+Corrigido: `_metricas_produto` em `scripts/ablacao_recuperacao.py` lê
+`meta.qualidade_geracao.contexto_insuficiente` — a declaração estruturada do próprio
+gerador, validada contra o schema em `responder_schema.py` — para decidir «respondeu»,
+em vez do texto livre da resposta. Isto importa porque `verification.gold.is_refusal`
+(heurística de regex sobre o texto) não reconhece o estilo de recusa que o prompt
+`generic` produz («The context does not provide information about…») e ficava em
+`False` em 100% dos itens dos três braços, incluindo `desvio_50` — escondendo
+precisamente a recusa que esta ablação existe para medir. «Respondeu e sustentado» exige
+`veredito == "sustentado"` estrito (não «não-negativo»): um item respondido e classificado
+`incompleto` não entra nem no numerador de sustentado nem no de alucinado. As três
+variáveis (`respondeu`, `respondeu_e_sustentado`, `alucinou`) e a comparação emparelhada
+sobre `respondeu_e_sustentado` reproduzem exactamente os números desta secção a partir
+dos `predictions.jsonl` gravados — ver `tests/test_ablacao_recuperacao_metrics.py`.
+
 ## Estatística
 
 Desenho emparelhado por construção — os braços correm sobre os mesmos ids. A comparação
@@ -252,5 +275,7 @@ parâmetros, a cobertura e a taxa por braço, e as comparações emparelhadas.
 - [x] `predictions.jsonl` por braço.
 - [x] Verificação do **contexto entregue** antes da geração, não só do ranking.
 - [x] Dose-resposta medida, com IC a excluir zero nos três pares.
+- [x] Variável dependente (`respondeu_e_sustentado`) calculada pelo script versionado, não
+      só derivável manualmente do `predictions.jsonl`.
 - [ ] Modo de extracção de span, para o plano léxico ser interpretável neste conjunto.
 - [ ] Estratificação por tipo de pergunta (`comparison` vs `bridge`).

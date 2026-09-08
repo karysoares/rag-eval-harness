@@ -77,7 +77,15 @@ def _conjunto(args: argparse.Namespace) -> ConjuntoPonte:
 
 
 def _sustentado(registo: RunRecord, vereditos_negativos: list[str]) -> bool | None:
-    """True se o juiz considerou a resposta sustentada; None quando não é medível.
+    """True se o juiz não classificou a resposta como negativa; None quando não é medível.
+
+    Esta é a taxa de aprovação do juiz — o KPI que sairia naturalmente do
+    `summary.json`. Ela é **enganosa como métrica de produto** (ver
+    SPEC-013): a árvore de decisão do juiz classifica uma recusa honesta com
+    contexto insuficiente como `sustentado`, e está correcta ao fazê-lo — mas
+    isso faz a taxa subir à medida que a recuperação piora, porque mistura
+    «respondeu bem» com «recusou bem». Fica no relatório só como contraste
+    com `respondeu_e_sustentado`, que é a variável dependente correcta.
 
     None em dois casos que **não** são resultados do sistema: o item falhou por
     erro de execução, ou o juiz caiu no fallback heurístico — que responde
@@ -90,6 +98,73 @@ def _sustentado(registo: RunRecord, vereditos_negativos: list[str]) -> bool | No
     if juiz is None or juiz.raw.get("fallback_heuristico"):
         return None
     return not judge_negative_for_aggregation(registo.signals, vereditos_negativos)
+
+
+def _contexto_insuficiente(registo: RunRecord) -> bool | None:
+    """O que o próprio gerador declarou sobre o contexto, na sua saída estruturada.
+
+    Isto — e não `verification.gold.is_refusal` sobre o texto da resposta — é
+    o sinal correcto de recusa aqui. `is_refusal` procura frases como «cannot»,
+    «não sei»; o prompt `generic` produz recusas como «The context does not
+    provide information about…», que essa heurística não reconhece, e o
+    braço degradado ficaria com `e_recusa=False` em 100% dos itens apesar de
+    recusar na prática. `contexto_insuficiente` vem do próprio JSON validado
+    do gerador (`responder_schema.py`) — é uma declaração, não um palpite
+    sobre texto livre.
+
+    None quando não há declaração para ler: erro de execução, ou saída que
+    falhou a validação de schema (`generation.py` grava `contexto_insuficiente:
+    None` nesse caso).
+    """
+    if registo.meta.get("processing_error"):
+        return None
+    qg = registo.meta.get("qualidade_geracao") or {}
+    valor = qg.get("contexto_insuficiente")
+    return valor if isinstance(valor, bool) else None
+
+
+def _veredito_medivel(registo: RunRecord) -> str | None:
+    """Veredito do juiz, ou None quando não é medível (mesmas exclusões de `_sustentado`)."""
+    if registo.meta.get("processing_error"):
+        return None
+    juiz = registo.signals.judge
+    if juiz is None or juiz.raw.get("fallback_heuristico"):
+        return None
+    return str(juiz.veredito)
+
+
+def _metricas_produto(registos: list[RunRecord]) -> dict[str, dict[str, bool]]:
+    """As variáveis dependentes que a SPEC-013 usa, uma por item, só onde medíveis.
+
+    `respondeu` e `respondeu_e_sustentado` separam «tentou responder» de
+    «tentou e o juiz sustentou completamente» (regra 8 do CLAUDE.md — planos
+    métricos não se misturam). `alucinou` é respondeu com veredito
+    `nao_sustentado` — resposta dada, contradita ou sem suporte, distinta de
+    recusa (não deu resposta) e de `incompleto` (respondeu, parcialmente
+    sustentado, nem aprovado nem contradito).
+
+    Cada dicionário só contém itens onde a variável é medível; a exclusão é
+    contada por braço em `bracos[nome]["geracao"]`.
+    """
+    respondeu: dict[str, bool] = {}
+    respondeu_e_sustentado: dict[str, bool] = {}
+    alucinou: dict[str, bool] = {}
+    for r in registos:
+        ci = _contexto_insuficiente(r)
+        if ci is None:
+            continue
+        resp = not ci
+        respondeu[r.item_id] = resp
+        veredito = _veredito_medivel(r)
+        if veredito is None:
+            continue
+        respondeu_e_sustentado[r.item_id] = resp and veredito == "sustentado"
+        alucinou[r.item_id] = resp and veredito == "nao_sustentado"
+    return {
+        "respondeu": respondeu,
+        "respondeu_e_sustentado": respondeu_e_sustentado,
+        "alucinou": alucinou,
+    }
 
 
 def _compara(
@@ -206,6 +281,8 @@ def main() -> None:
     cfg = load_config(args.config)
     negativos = list(cfg.verification.judge_aggregation_verdicts)
     sustentados: dict[str, dict[str, bool]] = {}
+    respondeu_por_braco: dict[str, dict[str, bool]] = {}
+    resp_sust_por_braco: dict[str, dict[str, bool]] = {}
     for nome, itens in itens_por_braco.items():
         print(f"\n=== geração: {nome} ({len(itens)} itens) ===")
         t0 = time.time()
@@ -229,39 +306,88 @@ def main() -> None:
         medidos = {r.item_id: _sustentado(r, negativos) for r in registos}
         sustentados[nome] = {k: v for k, v in medidos.items() if v is not None}
         excluidos = len(medidos) - len(sustentados[nome])
-        taxa = sum(sustentados[nome].values()) / len(sustentados[nome])
+        taxa_sustentado = sum(sustentados[nome].values()) / len(sustentados[nome])
+
+        produto = _metricas_produto(registos)
+        respondeu_por_braco[nome] = produto["respondeu"]
+        resp_sust_por_braco[nome] = produto["respondeu_e_sustentado"]
+        n_medidos_resp = len(produto["respondeu"])
+        taxa_respondeu = sum(produto["respondeu"].values()) / n_medidos_resp
+        # respondeu_e_sustentado e alucinou têm denominador próprio: excluem
+        # também os itens sem veredito medível (regra 4 do CLAUDE.md), que é
+        # um conjunto de exclusão diferente do de `respondeu` sozinho.
+        n_medidos_resp_sust = len(produto["respondeu_e_sustentado"])
+        taxa_resp_sust = sum(produto["respondeu_e_sustentado"].values()) / n_medidos_resp_sust
+        taxa_alucinou = sum(produto["alucinou"].values()) / n_medidos_resp_sust
+
         bracos[nome]["geracao"] = {
             "n_medidos": len(sustentados[nome]),
             "n_excluidos": excluidos,
-            "taxa_sustentado": round(taxa, 4),
+            # KPI ingénuo (ver docstring de `_sustentado`): sobe quando a
+            # recuperação piora. Fica aqui só para o contraste ficar no artefacto.
+            "taxa_aprovacao_juiz": round(taxa_sustentado, 4),
+            # Variáveis dependentes correctas (SPEC-013): separam «tentou
+            # responder» de «tentou e o juiz sustentou», em vez de misturar
+            # resposta sustentada com recusa honesta num só número.
+            "n_medidos_respondeu": n_medidos_resp,
+            "taxa_respondeu": round(taxa_respondeu, 4),
+            "taxa_recusou": round(1 - taxa_respondeu, 4),
+            "n_medidos_respondeu_e_sustentado": n_medidos_resp_sust,
+            "taxa_respondeu_e_sustentado": round(taxa_resp_sust, 4),
+            "taxa_alucinou": round(taxa_alucinou, 4),
             "segundos": round(time.time() - t0, 1),
         }
-        print(f"  sustentado={taxa:.3f}  medidos={len(sustentados[nome])}  excluídos={excluidos}")
+        print(
+            f"  respondeu={taxa_respondeu:.3f}  respondeu_e_sustentado={taxa_resp_sust:.3f}  "
+            f"alucinou={taxa_alucinou:.3f}  (aprovação_juiz={taxa_sustentado:.3f})"
+        )
 
     nomes = list(sustentados)
-    comparacoes = [
-        _compara(sustentados[a], sustentados[b], nome_a=a, nome_b=b)
-        for i, a in enumerate(nomes)
-        for b in nomes[i + 1 :]
+    pares = [(a, b) for i, a in enumerate(nomes) for b in nomes[i + 1 :]]
+    comparacoes_respondeu = [
+        _compara(respondeu_por_braco[a], respondeu_por_braco[b], nome_a=a, nome_b=b)
+        for a, b in pares
+    ]
+    comparacoes_resp_sust = [
+        _compara(resp_sust_por_braco[a], resp_sust_por_braco[b], nome_a=a, nome_b=b)
+        for a, b in pares
+    ]
+    comparacoes_aprovacao_juiz = [
+        _compara(sustentados[a], sustentados[b], nome_a=a, nome_b=b) for a, b in pares
     ]
     relatorio["bracos"] = bracos
-    relatorio["comparacoes"] = comparacoes
+    # `respondeu_e_sustentado` é a comparação que sustenta a conclusão do
+    # relatório; `respondeu` isolada mostra se a propensão a tentar responder
+    # já muda sozinha; `taxa_aprovacao_juiz` fica ao lado só para mostrar que
+    # a métrica óbvia aponta ao contrário (SPEC-013).
+    relatorio["comparacoes"] = {
+        "respondeu": comparacoes_respondeu,
+        "respondeu_e_sustentado": comparacoes_resp_sust,
+        "taxa_aprovacao_juiz": comparacoes_aprovacao_juiz,
+    }
     destino.write_text(json.dumps(relatorio, indent=2, ensure_ascii=False), encoding="utf-8")
 
-    print("\n=== COMPARAÇÕES EMPARELHADAS ===")
-    for c in comparacoes:
-        boot = c["bootstrap"] or {}
-        mac = c["mcnemar"] or {}
-        exclui_zero = boot and (boot["ic_inferior"] > 0 or boot["ic_superior"] < 0)
-        marca = "SIGNIFICATIVO" if exclui_zero else "não distinguível de ruído"
-        print(
-            f"  {c['par'][0]} vs {c['par'][1]}: "
-            f"{c['taxa_a']} vs {c['taxa_b']}  "
-            f"dif={boot.get('diferenca_observada', float('nan')):+.4f} "
-            f"IC95=[{boot.get('ic_inferior', float('nan')):+.4f},"
-            f"{boot.get('ic_superior', float('nan')):+.4f}]  "
-            f"p={mac.get('p_valor', float('nan')):.4g}  {marca}"
-        )
+    def _imprime(titulo: str, comparacoes: list[dict[str, Any]]) -> None:
+        print(f"\n=== {titulo} ===")
+        for c in comparacoes:
+            boot = c["bootstrap"] or {}
+            mac = c["mcnemar"] or {}
+            exclui_zero = boot and (boot["ic_inferior"] > 0 or boot["ic_superior"] < 0)
+            marca = "SIGNIFICATIVO" if exclui_zero else "não distinguível de ruído"
+            print(
+                f"  {c['par'][0]} vs {c['par'][1]}: "
+                f"{c['taxa_a']} vs {c['taxa_b']}  "
+                f"dif={boot.get('diferenca_observada', float('nan')):+.4f} "
+                f"IC95=[{boot.get('ic_inferior', float('nan')):+.4f},"
+                f"{boot.get('ic_superior', float('nan')):+.4f}]  "
+                f"p={mac.get('p_valor', float('nan')):.4g}  {marca}"
+            )
+
+    _imprime("COMPARAÇÕES EMPARELHADAS — respondeu_e_sustentado", comparacoes_resp_sust)
+    _imprime(
+        "COMPARAÇÕES EMPARELHADAS — taxa_aprovacao_juiz (KPI ingénuo)",
+        comparacoes_aprovacao_juiz,
+    )
     print(f"\n[escrito] {destino}")
 
 
