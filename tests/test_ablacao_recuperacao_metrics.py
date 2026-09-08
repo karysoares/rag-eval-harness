@@ -91,24 +91,65 @@ def test_respondeu_le_declaracao_estruturada_nao_texto_livre() -> None:
 
 def test_respondeu_e_sustentado_exige_veredito_exacto() -> None:
     # "incompleto" é resposta dada mas não é sustentada nem alucinação —
-    # não pode contar para nenhum dos dois numeradores.
+    # não pode contar para nenhum dos dois numeradores. "inseguro" é um eixo
+    # diferente (política, não grounding) e também não conta como alucinação.
     respondeu_incompleto = _registo("i1", contexto_insuficiente=False, veredito="incompleto")
     respondeu_sustentado = _registo("i2", contexto_insuficiente=False, veredito="sustentado")
     respondeu_alucinado = _registo("i3", contexto_insuficiente=False, veredito="nao_sustentado")
     recusou = _registo("i4", contexto_insuficiente=True, veredito="sustentado")
+    respondeu_inseguro = _registo("i5", contexto_insuficiente=False, veredito="inseguro")
 
     produto = ablacao._metricas_produto(
-        [respondeu_incompleto, respondeu_sustentado, respondeu_alucinado, recusou]
+        [
+            respondeu_incompleto,
+            respondeu_sustentado,
+            respondeu_alucinado,
+            recusou,
+            respondeu_inseguro,
+        ]
     )
 
-    assert produto["respondeu"] == {"i1": True, "i2": True, "i3": True, "i4": False}
+    assert produto["respondeu"] == {
+        "i1": True,
+        "i2": True,
+        "i3": True,
+        "i4": False,
+        "i5": True,
+    }
     assert produto["respondeu_e_sustentado"] == {
         "i1": False,
         "i2": True,
         "i3": False,
         "i4": False,
+        "i5": False,
     }
-    assert produto["alucinou"] == {"i1": False, "i2": False, "i3": True, "i4": False}
+    assert produto["alucinou"] == {
+        "i1": False,
+        "i2": False,
+        "i3": True,
+        "i4": False,
+        "i5": False,
+    }
+
+
+def test_contradicao_conta_como_alucinacao() -> None:
+    # judge_generic_system.txt define contradicacao como "explicit conflict
+    # with context" — tão alucinação quanto nao_sustentado ("hallucination or
+    # extrapolation"), só que a inverter um facto em vez de o inventar. Um
+    # juiz que devolvesse isto ficaria invisível no numerador de alucinação
+    # se só nao_sustentado contasse.
+    respondeu_contradicao = _registo("i1", contexto_insuficiente=False, veredito="contradicacao")
+    produto = ablacao._metricas_produto([respondeu_contradicao])
+    assert produto["alucinou"]["i1"] is True
+    assert produto["respondeu_e_sustentado"]["i1"] is False
+
+
+def test_taxa_com_denominador_zero_nao_lanca_excecao() -> None:
+    # Um braço inteiro sem itens medíveis (ex.: quota esgotada em 100% dos
+    # itens) não pode derrubar a agregação final com ZeroDivisionError — a
+    # corrida já pagou a geração; perder só o resumo é preferível a perder tudo.
+    assert ablacao._taxa(0, 0) is None
+    assert ablacao._taxa(3, 4) == 0.75
 
 
 def test_exclusoes_nao_contaminam_numerador_nem_denominador() -> None:

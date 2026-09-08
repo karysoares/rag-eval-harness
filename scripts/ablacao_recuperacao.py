@@ -133,15 +133,24 @@ def _veredito_medivel(registo: RunRecord) -> str | None:
     return str(juiz.veredito)
 
 
+# Vereditos que, dados sobre uma resposta que respondeu (não recusou), contam
+# como alucinação: `nao_sustentado` é "hallucination or extrapolation" e
+# `contradicacao` é "explicit conflict with context" no próprio prompt do
+# juiz (judge_generic_system.txt) — ambos são a resposta a inventar ou
+# inverter um facto, não a responder parcialmente (`incompleto`) nem a violar
+# política (`inseguro`, eixo diferente: segurança, não grounding).
+_VEREDITOS_ALUCINACAO = frozenset({"nao_sustentado", "contradicacao"})
+
+
 def _metricas_produto(registos: list[RunRecord]) -> dict[str, dict[str, bool]]:
     """As variáveis dependentes que a SPEC-013 usa, uma por item, só onde medíveis.
 
     `respondeu` e `respondeu_e_sustentado` separam «tentou responder» de
     «tentou e o juiz sustentou completamente» (regra 8 do CLAUDE.md — planos
-    métricos não se misturam). `alucinou` é respondeu com veredito
-    `nao_sustentado` — resposta dada, contradita ou sem suporte, distinta de
-    recusa (não deu resposta) e de `incompleto` (respondeu, parcialmente
-    sustentado, nem aprovado nem contradito).
+    métricos não se misturam). `alucinou` é respondeu com veredito em
+    `_VEREDITOS_ALUCINACAO` — resposta dada, contradita ou sem suporte,
+    distinta de recusa (não deu resposta) e de `incompleto` (respondeu,
+    parcialmente sustentado, nem aprovado nem contradito).
 
     Cada dicionário só contém itens onde a variável é medível; a exclusão é
     contada por braço em `bracos[nome]["geracao"]`.
@@ -159,12 +168,29 @@ def _metricas_produto(registos: list[RunRecord]) -> dict[str, dict[str, bool]]:
         if veredito is None:
             continue
         respondeu_e_sustentado[r.item_id] = resp and veredito == "sustentado"
-        alucinou[r.item_id] = resp and veredito == "nao_sustentado"
+        alucinou[r.item_id] = resp and veredito in _VEREDITOS_ALUCINACAO
     return {
         "respondeu": respondeu,
         "respondeu_e_sustentado": respondeu_e_sustentado,
         "alucinou": alucinou,
     }
+
+
+def _taxa(numerador: int, denominador: int) -> float | None:
+    """Divisão seguida de arredondamento; None (não `ZeroDivisionError`) sem itens.
+
+    Um braço inteiro sem nenhum item medível é raro mas possível — por exemplo
+    uma corrida onde o esgotamento de quota atinge 100% de um braço. Nesse caso
+    a taxa não existe, e é isso que o relatório deve dizer, em vez de a corrida
+    inteira (que já pagou a geração) morrer numa excepção na agregação final.
+    """
+    if denominador == 0:
+        return None
+    return round(numerador / denominador, 4)
+
+
+def _fmt_taxa(v: float | None) -> str:
+    return "indefinido" if v is None else f"{v:.3f}"
 
 
 def _compara(
@@ -306,40 +332,43 @@ def main() -> None:
         medidos = {r.item_id: _sustentado(r, negativos) for r in registos}
         sustentados[nome] = {k: v for k, v in medidos.items() if v is not None}
         excluidos = len(medidos) - len(sustentados[nome])
-        taxa_sustentado = sum(sustentados[nome].values()) / len(sustentados[nome])
+        taxa_sustentado = _taxa(sum(sustentados[nome].values()), len(sustentados[nome]))
 
         produto = _metricas_produto(registos)
         respondeu_por_braco[nome] = produto["respondeu"]
         resp_sust_por_braco[nome] = produto["respondeu_e_sustentado"]
         n_medidos_resp = len(produto["respondeu"])
-        taxa_respondeu = sum(produto["respondeu"].values()) / n_medidos_resp
+        taxa_respondeu = _taxa(sum(produto["respondeu"].values()), n_medidos_resp)
         # respondeu_e_sustentado e alucinou têm denominador próprio: excluem
         # também os itens sem veredito medível (regra 4 do CLAUDE.md), que é
         # um conjunto de exclusão diferente do de `respondeu` sozinho.
         n_medidos_resp_sust = len(produto["respondeu_e_sustentado"])
-        taxa_resp_sust = sum(produto["respondeu_e_sustentado"].values()) / n_medidos_resp_sust
-        taxa_alucinou = sum(produto["alucinou"].values()) / n_medidos_resp_sust
+        taxa_resp_sust = _taxa(sum(produto["respondeu_e_sustentado"].values()), n_medidos_resp_sust)
+        taxa_alucinou = _taxa(sum(produto["alucinou"].values()), n_medidos_resp_sust)
 
         bracos[nome]["geracao"] = {
             "n_medidos": len(sustentados[nome]),
             "n_excluidos": excluidos,
             # KPI ingénuo (ver docstring de `_sustentado`): sobe quando a
             # recuperação piora. Fica aqui só para o contraste ficar no artefacto.
-            "taxa_aprovacao_juiz": round(taxa_sustentado, 4),
+            "taxa_aprovacao_juiz": taxa_sustentado,
             # Variáveis dependentes correctas (SPEC-013): separam «tentou
             # responder» de «tentou e o juiz sustentou», em vez de misturar
             # resposta sustentada com recusa honesta num só número.
             "n_medidos_respondeu": n_medidos_resp,
-            "taxa_respondeu": round(taxa_respondeu, 4),
-            "taxa_recusou": round(1 - taxa_respondeu, 4),
+            "taxa_respondeu": taxa_respondeu,
+            "taxa_recusou": None if taxa_respondeu is None else round(1 - taxa_respondeu, 4),
             "n_medidos_respondeu_e_sustentado": n_medidos_resp_sust,
-            "taxa_respondeu_e_sustentado": round(taxa_resp_sust, 4),
-            "taxa_alucinou": round(taxa_alucinou, 4),
+            "taxa_respondeu_e_sustentado": taxa_resp_sust,
+            "taxa_alucinou": taxa_alucinou,
             "segundos": round(time.time() - t0, 1),
         }
+
         print(
-            f"  respondeu={taxa_respondeu:.3f}  respondeu_e_sustentado={taxa_resp_sust:.3f}  "
-            f"alucinou={taxa_alucinou:.3f}  (aprovação_juiz={taxa_sustentado:.3f})"
+            f"  respondeu={_fmt_taxa(taxa_respondeu)}  "
+            f"respondeu_e_sustentado={_fmt_taxa(taxa_resp_sust)}  "
+            f"alucinou={_fmt_taxa(taxa_alucinou)}  "
+            f"(aprovação_juiz={_fmt_taxa(taxa_sustentado)})"
         )
 
     nomes = list(sustentados)
