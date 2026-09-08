@@ -10,7 +10,7 @@ public service. The relevant surfaces are:
 | API keys (`OPENAI_API_KEY`) | Leakage via commits/artifacts | Keys live only in `.env` (gitignored); `.env.example` documents shape; secret scanning in CI |
 | Run artifacts (`outputs/run_*`) | Accidental PII from datasets | Reference corpus (FairytaleQA pt-BR) is public fiction; adapters must not ingest private data without review |
 | LLM judge calls | Prompt injection from corpus text | Judge prompts are versioned and hashed in the run manifest; heuristic fallback is excluded from aggregation |
-| Dependencies | Supply chain | `uv.lock` committed; Dependabot + `pip-audit` in CI |
+| Dependencies | Supply chain | `uv.lock` committed; Dependabot + **blocking** `pip-audit` in CI, with an explicit allowlist carrying a written reason per advisory id |
 | Dashboard (Streamlit) | Local only | Never intended for public deployment; no auth by design |
 
 ## Reporting a vulnerability
@@ -24,3 +24,6 @@ receive a response within 7 days.
 - No real customer data in `configs/`, `tests/fixtures/` or committed `outputs/`.
 - Secrets never in code, YAML, or notebooks — env vars only.
 - New adapters that touch non-public corpora require a data note in `docs/`.
+- The `pip-audit` allowlist is not a place to silence noise. Each entry states why the
+  advisory does not apply or why the fix is out of reach, and leaves when that stops
+  being true. Widening it without that reasoning defeats the gate.
