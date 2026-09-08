@@ -310,18 +310,41 @@ def load_hitl_labels_merged(run_dir: Path) -> dict[str, dict[str, str]]:
 load_hitl_labels = load_hitl_labels_merged
 
 
-def export_hitl_csv_template(path: Path, item_ids: list[str]) -> None:
+#: Colunas de leitura acrescentadas ao template. Não são lidas na aplicação
+#: (`_parse_row` só olha para `id_item` e `rotulo`), existem para que a pessoa
+#: consiga julgar sem abrir o `predictions.jsonl` em paralelo.
+HITL_CONTEXT_FIELDS = ("pergunta", "resposta_modelo", "referencia", "contexto_recuperado")
+
+
+def export_hitl_csv_template(
+    path: Path,
+    item_ids: list[str],
+    *,
+    contexto: dict[str, dict[str, str]] | None = None,
+) -> None:
+    """Escreve o template de adjudicação.
+
+    Com ``contexto``, acrescenta as colunas de leitura: sem a pergunta, a resposta
+    e o contexto recuperado ao lado, rotular exige cruzar o CSV com o JSONL à mão,
+    e o esforço por item deixa de ser razoável.
+    """
+    campos = list(HITL_CSV_FIELDS)
+    if contexto:
+        campos += list(HITL_CONTEXT_FIELDS)
     path.parent.mkdir(parents=True, exist_ok=True)
     with path.open("w", newline="", encoding="utf-8") as f:
-        w = csv.DictWriter(f, fieldnames=list(HITL_CSV_FIELDS))
+        w = csv.DictWriter(f, fieldnames=campos)
         w.writeheader()
         for iid in item_ids:
-            w.writerow(
-                {
-                    "id_item": iid,
-                    "rotulo": "",
-                    "revisor": "",
-                    "timestamp_utc": "",
-                    "notas": "",
-                },
-            )
+            linha = {
+                "id_item": iid,
+                "rotulo": "",
+                "revisor": "",
+                "timestamp_utc": "",
+                "notas": "",
+            }
+            if contexto:
+                extra = contexto.get(iid, {})
+                for campo in HITL_CONTEXT_FIELDS:
+                    linha[campo] = extra.get(campo, "")
+            w.writerow(linha)
