@@ -340,6 +340,8 @@ def summarize(
         n_em_norm = 0
         n_em_squad = 0
         f1_vals: list[float] = []
+        motivos_meteor: dict[str, int] = {}
+        idiomas: set[str] = set()
         for r in records:
             lm = r.meta.get("metricas_lexicas") or r.meta.get("lexical_metrics")
             if not isinstance(lm, dict):
@@ -357,6 +359,12 @@ def summarize(
                 rouge_f.append(float(rf))
             if lm.get("meteor") is not None:
                 met.append(float(lm["meteor"]))
+            motivo = lm.get("meteor_indisponivel")
+            if motivo:
+                motivos_meteor[str(motivo)] = motivos_meteor.get(str(motivo), 0) + 1
+            idioma = lm.get("idioma")
+            if idioma:
+                idiomas.add(str(idioma))
             sl = lm.get("similaridade_levenshtein")
             if sl is None:
                 sl = lm.get("levenshtein_similarity")
@@ -387,7 +395,28 @@ def summarize(
             "media_meteor": mean(met),
             "media_similaridade_levenshtein": mean(lev),
             "media_f1_token": mean(f1_vals),
+            # Cada métrica tem o seu próprio denominador: uma que falhe em parte
+            # do corpus continua a produzir média, e sem o n ao lado essa média
+            # lê-se como se fosse dos ``n_itens_pontuados``. Quando a falha
+            # depende da dificuldade do par — o METEOR sem ``wordnet`` só
+            # devolve valor no casamento exacto — o subconjunto sobrevivente é
+            # o mais fácil e a média fica enviesada para cima por construção.
+            "n_por_metrica": {
+                "bleu": len(bleu_vals),
+                "rouge_l_f": len(rouge_f),
+                "meteor": len(met),
+                "similaridade_levenshtein": len(lev),
+                "f1_token": len(f1_vals),
+            },
+            "idioma_normalizacao": sorted(idiomas) if idiomas else None,
         }
+        if motivos_meteor:
+            out_lex["meteor_indisponivel"] = dict(sorted(motivos_meteor.items()))
+        if met and n_scored and len(met) < n_scored:
+            out_lex["nota_cobertura"] = (
+                f"media_meteor calculada sobre {len(met)} de {n_scored} itens pontuados; "
+                "a ausência não é aleatória — ver meteor_indisponivel."
+            )
         if n_scored:
             out_lex["taxa_exact_match"] = n_em / n_scored
             out_lex["taxa_exact_match_normalizado"] = n_em_norm / n_scored
