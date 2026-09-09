@@ -9,6 +9,7 @@ from typing import Any, Literal, cast
 import yaml
 
 from llm_evaluation.operational import OperationalThresholds
+from llm_evaluation.squad_metrics import Idioma
 
 AggregationPolicy = Literal["qualquer_critico", "todos_criticos", "embedding_e_juiz"]
 #: `generic` é agnóstico ao corpus e em inglês; os outros dois assumem
@@ -142,6 +143,11 @@ class LexicalMetricsConfig:
     levenshtein: bool
     token_f1: bool
     reference_mode: LexicalReferenceMode
+    #: Idioma da normalização token-a-token. ``"pt"`` por omissão porque o caso
+    #: de referência do repositório é português: a normalização oficial do SQuAD
+    #: é inglesa e enviesa F1 e EM contra português correcto. ``"en"`` reproduz
+    #: o protocolo oficial para corpora ingleses (ver ``squad_metrics``).
+    idioma: Idioma = "pt"
 
 
 @dataclass
@@ -575,6 +581,7 @@ def load_config(path: Path) -> AppConfig:
             levenshtein=bool(lx_d.get("levenshtein", True)),
             token_f1=token_f1,
             reference_mode=cast("LexicalReferenceMode", ref_mode),
+            idioma=cast("Idioma", str(lx_d.get("idioma", "pt")).lower()),
         ),
         patterns=patterns,
         operational=operational,

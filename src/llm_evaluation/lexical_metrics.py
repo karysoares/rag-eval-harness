@@ -15,6 +15,19 @@ from llm_evaluation.squad_metrics import squad_scores
 from llm_evaluation.types import EvalItem
 from llm_evaluation.verification.gold import normalize_answer
 
+
+#: Tokenizador Unicode para o ``rouge_score``.
+#:
+#: O tokenizador por omissão normaliza com ``[^a-z0-9]+``, ASCII puro: cada
+#: acento vira separador e a palavra parte-se ao meio — ``"informação"`` dava
+#: ``["informa", "o"]`` e ``"coração"`` dava ``["cora", "o"]``. Sobre português
+#: acentuado o ROUGE-L deixava de medir sobreposição de palavras e passava a
+#: medir fragmentos delas.
+class _TokenizadorUnicode:
+    def tokenize(self, text: str) -> list[str]:
+        return re.findall(r"\w+", text.lower(), flags=re.UNICODE)
+
+
 #: Scorers por thread. O loop de itens corre num pool (ver `pipeline.run_batch`)
 #: e nem `sacrebleu` nem `rouge_score` documentam segurança entre threads — o
 #: `BLEU` mantém cache interna de referências. Partilhar uma instância não faria
@@ -35,9 +48,18 @@ def _bleu() -> BLEU:
 def _rouge() -> rouge_scorer.RougeScorer:
     inst: rouge_scorer.RougeScorer | None = getattr(_scorers, "rouge", None)
     if inst is None:
-        inst = rouge_scorer.RougeScorer(["rougeL"], use_stemmer=False)
+        inst = rouge_scorer.RougeScorer(
+            ["rougeL"],
+            use_stemmer=False,
+            tokenizer=_TokenizadorUnicode(),
+        )
         _scorers.rouge = inst
     return inst
+
+
+#: Motivo pelo qual o METEOR não foi calculado, quando não foi. Guardado no
+#: artefacto para que a ausência seja contável em vez de silenciosa.
+METEOR_INDISPONIVEL = "meteor_indisponivel"
 
 
 def pick_reference(
@@ -78,16 +100,21 @@ def _levenshtein_similarity(a: str, b: str) -> float:
     return max(0.0, 1.0 - dist / denom)
 
 
-def _meteor_score_optional(reference: str, hypothesis: str) -> float | None:
-    """METEOR via NLTK quando disponível (WordNet opcional); senão None.
+def _meteor_score_optional(reference: str, hypothesis: str) -> tuple[float | None, str | None]:
+    """METEOR via NLTK; devolve ``(valor, motivo_da_ausência)``.
 
-    Falhas do NLTK (corpora em falta, bugs internos, inputs patológicos) são
-    engolidas: a pipeline de avaliação não deve abortar por causa de METEOR.
+    Falhas do NLTK (corpora em falta, bugs internos, inputs patológicos) não
+    derrubam a corrida — mas passam a ser **nomeadas**. Engolir a excepção e
+    devolver ``None`` fazia o METEOR desaparecer em silêncio: sem o corpus
+    ``wordnet`` instalado, o NLTK só devolve valor quando o par casa por
+    correspondência exacta, ou seja, exactamente nos itens fáceis. A média
+    resultante era calculada sobre esse subconjunto e publicada como se fosse
+    do corpus todo — enviesada para cima por construção, não ruidosa.
     """
     try:
         from nltk.translate.meteor_score import meteor_score
     except ImportError:
-        return None
+        return None, "nltk_ausente"
 
     def _tok(s: str) -> list[str]:
         return re.findall(r"\w+", s.lower(), flags=re.UNICODE)
@@ -95,15 +122,20 @@ def _meteor_score_optional(reference: str, hypothesis: str) -> float | None:
     rt = _tok(reference)
     ht = _tok(hypothesis)
     if not rt or not ht:
-        return None
+        return None, "tokens_vazios"
     try:
         # NLTK ≥3.9: ``meteor_score(references, hypothesis)`` — ``references`` é uma
         # *lista* de referências pré-tokenizadas (cada uma ``list[str]``).
         # Passar ``rt`` direto faz o NLTK iterar tokens como se fossem várias frases
         # e levanta TypeError (ex.: token ``"air"`` como ``str``).
-        return float(meteor_score([rt], ht))
-    except Exception:  # noqa: BLE001 — METEOR é opcional; nunca derrubar a corrida
-        return None
+        return float(meteor_score([rt], ht)), None
+    except LookupError:
+        # Corpus do NLTK em falta (tipicamente ``wordnet``). É configuração do
+        # ambiente, não propriedade do item: distingue-se do resto para que a
+        # contagem no sumário aponte à causa.
+        return None, "recurso_nltk_ausente"
+    except Exception as exc:  # noqa: BLE001 — METEOR é opcional; nunca derrubar a corrida
+        return None, f"erro_nltk_{type(exc).__name__}"
 
 
 def compute_lexical_scores(
@@ -127,8 +159,9 @@ def compute_lexical_scores(
     out["exact_match_normalizado"] = bool(
         hyp_norm == normalize_answer(ref),
     )
+    out["idioma"] = cfg.idioma
     if cfg.token_f1:
-        out.update(squad_scores(hypothesis, correct_answers))
+        out.update(squad_scores(hypothesis, correct_answers, cfg.idioma))
 
     if cfg.bleu:
         s = _bleu().sentence_score(hypothesis, [ref])
@@ -142,9 +175,11 @@ def compute_lexical_scores(
         out["rouge_l_f"] = float(sc["rougeL"].fmeasure)
 
     if cfg.meteor:
-        m = _meteor_score_optional(ref, hypothesis)
+        m, motivo = _meteor_score_optional(ref, hypothesis)
         if m is not None:
             out["meteor"] = m
+        else:
+            out[METEOR_INDISPONIVEL] = motivo
 
     if cfg.levenshtein:
         out["similaridade_levenshtein"] = _levenshtein_similarity(ref, hypothesis)
