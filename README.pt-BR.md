@@ -27,9 +27,11 @@ Quatro juízes sobre os mesmos 200 itens, medidos com o próprio harness:
 | `gpt-4o` | 0,561 | −0,028 | 0,421 | 0,982 | 11,7 |
 | `gpt-4o-mini` | 0,575 | −0,006 | 0,399 | 0,974 | 3,0 |
 | `gpt-5.4-nano` | **0,610** | 0,092 | **0,296** | 0,906 | **2,5** |
-| `qwen2.5` (local, gratuito) | 0,585 | **0,190** | 0,366 | 0,911 | 33,7 |
+| `qwen2.5` (local, gratuito) † | 0,585 | **0,190** | 0,366 | 0,911 | 33,7 |
 
-Todos declaram confiança de 0,91–0,98 acertando 56–61%, portanto nenhum serve para triagem por confiança. O mais caro é último em todas as colunas. O modelo local gratuito é o que melhor discrimina. Nada disto se vê a partir de uma pontuação de exatidão — [ver como é medido](#meta-avaliação-do-juiz).
+Todos declaram confiança de 0,91–0,98 acertando 56–61%, portanto nenhum serve para triagem por confiança. O mais caro é último em todas as colunas. Nada disto se vê a partir de uma pontuação de exatidão — [ver como é medido](#meta-avaliação-do-juiz).
+
+† O braço local correu com gerador local (`llama3.2`) além do juiz local, pelo que a sua linha não é um contraste só de juiz face aos três braços de API — leia-se como ponto de custo e latência, não como prova de que o juiz local discrimina melhor.
 
 Por baixo está um harness **agnóstico ao corpus**: cada dataset é um adaptador; o núcleo mede recuperação, geração e verificação em camadas independentes. O caso de referência incluído é **FairytaleQA pt-BR** ([`benjleite/FairytaleQA-translated-ptBR`](https://huggingface.co/datasets/benjleite/FairytaleQA-translated-ptBR)).
 
@@ -190,18 +192,18 @@ uv run llm-eval --judge-report outputs/run_<id>
 
 Presets para Ollama, vLLM, DeepSeek, DashScope e OpenRouter em [`.env.example`](.env.example).
 
-**Escolha o juiz com o harness, não por intuição.** Quatro juízes sobre os mesmos 200 itens (`configs/ptbr_fairytale_judge_ab.yaml`, mesmo gerador, emparelhados por `id_item`):
+**Escolha o juiz com o harness, não por intuição.** Quatro juízes sobre os mesmos 200 itens (`configs/ptbr_fairytale_judge_ab.yaml`, emparelhados por `id_item`). Os três braços de API partilham o gerador `gpt-4o-mini`; o braço local gerou com `llama3.2` no mesmo endpoint local, o que confunde juiz com gerador nessa linha:
 
 | juiz | n | exatidão | κ | ECE | conf. média | `sustentado` | s/item |
 |---|---|---|---|---|---|---|---|
 | `gpt-4o` | 189 | 0,561 | −0,028 | 0,421 | 0,982 | 86,2% | 11,7 |
 | `gpt-4o-mini` | 200 | 0,575 | −0,006 | 0,399 | 0,974 | 78,0% | 3,0 |
 | **`gpt-5.4-nano`** | 200 | **0,610** | 0,092 | **0,296** | 0,906 | 76,5% | **2,5** |
-| `qwen2.5` (Ollama) | 200 | 0,585 | **0,190** | 0,366 | 0,911 | 59,5% | 33,7 |
+| `qwen2.5` (Ollama) † | 200 | 0,585 | **0,190** | 0,366 | 0,911 | 59,5% | 33,7 |
 
 Nenhum par difere significativamente na taxa de alerta (todos p=1 depois de excluir falhas de execução). As colunas leem-se em separado: exatidão e κ são medidos contra uma referência *léxica*, que faz uma pergunta diferente da do juiz, por isso κ perto de zero significa que os dois sinais são independentes e não que o juiz erra. A calibração é inequívoca — todos declaram confiança de 0,91–0,98 acertando 56–61%, portanto `confianca` não serve de limiar de triagem.
 
-O modelo caro não é o bom: o `gpt-4o` fica último em todas as colunas e custa 9,3× o `gpt-4o-mini`. O juiz local mantém o κ mais alto e a menor taxa de aprovação, a custo zero e com 13× a latência.
+O modelo caro não é o bom: o `gpt-4o` fica último em todas as colunas e custa 9,3× o `gpt-4o-mini` — e essa comparação *é* limpa, porque os dois braços partilham o gerador. † O braço local mudou duas variáveis ao mesmo tempo (juiz **e** gerador), portanto o κ mais alto e a menor taxa de aprovação são igualmente compatíveis com um gerador mais fraco a produzir respostas mais fracas. Repeti-lo com `gpt-4o-mini` como gerador é o ponto em aberto; até lá a linha vale como medição de custo e latência.
 
 Agregados completos, com uso de tokens por modelo e os testes emparelhados: [`docs/evidencia/judge_ab_fairytale_200.json`](docs/evidencia/judge_ab_fairytale_200.json).
 

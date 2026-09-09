@@ -6,6 +6,20 @@ Alterações relevantes do projeto, no formato [Keep a Changelog](https://keepac
 
 ### Added
 
+- Portuguese-aware lexical normalisation (`metricas_lexicas.idioma`, default `pt`). The ROUGE tokenizer is now Unicode-aware — the previous ASCII one split every accented word (`informação` → `informa`, `o`) — and token normalisation separates on hyphens instead of gluing enclisis and compounds (`deu-lhe` → `deu lhe`), while removing Portuguese articles symmetrically in gender and number. `idioma: en` reproduces the official SQuAD protocol byte for byte, so published English results stay comparable. Measured over the four recorded runs, aggregate F1 and ROUGE-L move by less than 0.01; per item, 131 of 200 change and 18 move by more than 0.10.
+- Per-metric denominators in `sumario_lexical` (`n_por_metrica`), plus `meteor_indisponivel` counting why METEOR produced no value. Without the NLTK `wordnet` corpus, METEOR only returns a score on near-exact matches, so its mean was computed over the easiest 2% of items and published next to `n_itens_pontuados`, reading as full coverage.
+- `idioma_normalizacao` recorded in `sumario_lexical`, so the active variety is part of the artifact.
+
+### Fixed
+
+- `audit_run.py --strict` no longer fails a run over items that never produced metrics because execution failed (quota, network, provider 4xx). Those items are excluded from the metric checks and reported as a separate note with the error types, in line with the rule that an execution failure is not a property of the system under evaluation.
+- Credential redaction now covers query-string authentication (`?api-key=`, `?key=`, `?access_token=`) and vendor key prefixes beyond `sk-` (`gsk_`, `ghp_`, `glpat-`, `hf_`, `xai-`). Provider error messages reach `meta.processing_error` in the published `predictions.jsonl`, and these forms passed through verbatim. The parameter name survives redaction so the message still says which credential failed.
+- Provider HTTP errors record only `scheme://host` instead of the full request URL, matching how endpoints are recorded elsewhere in the artifacts.
+
+### Changed
+
+- The judge A/B table in both READMEs now states which generator each arm used. The three API arms share `gpt-4o-mini`; the local arm generated with `llama3.2`, which confounds judge with generator in that row, and the text no longer claims the local judge discriminates better.
+
 - Estatística emparelhada para comparar corridas sobre os mesmos itens: teste de McNemar (exato ou χ² com correção de continuidade) e IC bootstrap emparelhado (`statistics.mcnemar_test`, `statistics.paired_bootstrap_diff_ci`). `--compare-runs` alinha por `id_item` e emite `significancia_emparelhada`; `run_comparison.json` passa a `versao_esquema: "2"`.
 - Concorrência de itens em `run_batch` via `llm.concurrency` no YAML ou `LLM_EVAL_CONCURRENCY` (padrão 1). Medido: 4,0× com 4 workers, 7,3× com 8 (mock de 150 ms/chamada, 60 itens).
 - `retrieval.CachingEmbedder`: memoriza embeddings por texto entre itens e entre recuperação e verificação (84,8% de acerto no cenário acima).

@@ -27,9 +27,11 @@ Four judges over the same 200 items, measured with the harness itself:
 | `gpt-4o` | 0.561 | −0.028 | 0.421 | 0.982 | 11.7 |
 | `gpt-4o-mini` | 0.575 | −0.006 | 0.399 | 0.974 | 3.0 |
 | `gpt-5.4-nano` | **0.610** | 0.092 | **0.296** | 0.906 | **2.5** |
-| `qwen2.5` (local, free) | 0.585 | **0.190** | 0.366 | 0.911 | 33.7 |
+| `qwen2.5` (local, free) † | 0.585 | **0.190** | 0.366 | 0.911 | 33.7 |
 
-Every one of them declares 0.91–0.98 confidence while being right 56–61% of the time, so none can be used for confidence-based triage. The most expensive is last on every column. The free local model discriminates best. None of that is visible from an accuracy score alone — [see how it is measured](#judge-meta-evaluation).
+Every one of them declares 0.91–0.98 confidence while being right 56–61% of the time, so none can be used for confidence-based triage. The most expensive is last on every column. None of that is visible from an accuracy score alone — [see how it is measured](#judge-meta-evaluation).
+
+† The local arm ran a local generator (`llama3.2`) as well as a local judge, so its row is not a clean judge-only contrast with the three API arms — read it as a cost/latency data point, not as evidence that the local judge discriminates better.
 
 Underneath is a **corpus-agnostic** harness: every dataset is an adapter, and the core measures retrieval, generation and verification as independent layers. The bundled reference case is **FairytaleQA pt-BR** ([`benjleite/FairytaleQA-translated-ptBR`](https://huggingface.co/datasets/benjleite/FairytaleQA-translated-ptBR)).
 
@@ -194,18 +196,18 @@ uv run llm-eval --judge-report outputs/run_<id>
 
 Presets for Ollama, vLLM, DeepSeek, DashScope and OpenRouter are in [`.env.example`](.env.example).
 
-**Choose a judge with the harness, not with intuition.** Four judges over the same 200 items (`configs/ptbr_fairytale_judge_ab.yaml`, same generator, paired by `id_item`):
+**Choose a judge with the harness, not with intuition.** Four judges over the same 200 items (`configs/ptbr_fairytale_judge_ab.yaml`, paired by `id_item`). The three API arms share the `gpt-4o-mini` generator; the local arm generated with `llama3.2` on the same local endpoint, which confounds judge with generator in that row:
 
 | judge | n | accuracy | κ | ECE | mean conf. | `sustentado` | s/item |
 |---|---|---|---|---|---|---|---|
 | `gpt-4o` | 189 | 0.561 | −0.028 | 0.421 | 0.982 | 86.2% | 11.7 |
 | `gpt-4o-mini` | 200 | 0.575 | −0.006 | 0.399 | 0.974 | 78.0% | 3.0 |
 | **`gpt-5.4-nano`** | 200 | **0.610** | 0.092 | **0.296** | 0.906 | 76.5% | **2.5** |
-| `qwen2.5` (Ollama) | 200 | 0.585 | **0.190** | 0.366 | 0.911 | 59.5% | 33.7 |
+| `qwen2.5` (Ollama) † | 200 | 0.585 | **0.190** | 0.366 | 0.911 | 59.5% | 33.7 |
 
 No pair differs significantly on alert rate (all p=1 after excluding execution failures). Read the columns separately: accuracy and κ are measured against a *lexical* reference, which asks a different question than the judge does, so κ near zero means the two signals are independent rather than that the judge is wrong. Calibration is unambiguous — every judge declares 0.91–0.98 confidence while being right 56–61% of the time, so `confianca` is not usable as a triage threshold.
 
-The costly model is not the good one: `gpt-4o` is last on every column and 9.3× the price of `gpt-4o-mini`. The local judge keeps the highest κ and the lowest approval rate, at zero cost and 13× the latency.
+The costly model is not the good one: `gpt-4o` is last on every column and 9.3× the price of `gpt-4o-mini`, and that comparison *is* clean — both arms share the generator. † The local arm changed two variables at once (judge **and** generator), so its higher κ and lower approval rate are equally consistent with a weaker generator producing weaker answers. Re-running it with `gpt-4o-mini` as the generator is the open item; until then the row stands as a cost and latency measurement only.
 
 Full aggregates, including per-model token usage and the paired tests: [`docs/evidencia/judge_ab_fairytale_200.json`](docs/evidencia/judge_ab_fairytale_200.json).
 
