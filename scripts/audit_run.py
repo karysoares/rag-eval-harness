@@ -13,6 +13,7 @@ from llm_evaluation.run_artifacts import validate_run_artifacts
 
 def audit(run_dir: Path, *, strict: bool = False) -> list[str]:
     issues: list[str] = []
+    notes: list[str] = []
     pred = run_dir / "predictions.jsonl"
     if not pred.is_file():
         return [f"{run_dir.name}: sem predictions.jsonl"]
@@ -27,8 +28,32 @@ def audit(run_dir: Path, *, strict: bool = False) -> list[str]:
     ref_type = summary.get("tipo_referencia_ativo", "?")
     kpi = summary.get("kpi_primario", "?")
 
+    # Itens que a corrida nunca chegou a avaliar — quota, rede, 4xx do fornecedor.
+    # Contam-se e relatam-se à parte: um item sem resposta por falha de execução
+    # não tem métricas por medir, e tratá-lo como artefacto incompleto reprovava
+    # a corrida por uma propriedade da infraestrutura, não do sistema avaliado.
+    falhados = [r for r in recs if "processing_error" in (r.meta or {})]
+    ids_falhados = {r.item_id for r in falhados}
+    if falhados:
+        tipos: dict[str, int] = {}
+        for r in falhados:
+            erro = (r.meta or {}).get("processing_error") or {}
+            tipo = (
+                str(erro.get("type") or "desconhecido")
+                if isinstance(erro, dict)
+                else "desconhecido"
+            )
+            tipos[tipo] = tipos.get(tipo, 0) + 1
+        resumo = ", ".join(f"{t}×{c}" for t, c in sorted(tipos.items()))
+        notes.append(
+            f"{run_dir.name}: {len(falhados)} de {n} itens com erro de execução ({resumo}); "
+            "excluídos das verificações de métricas e de qualquer estatística.",
+        )
+
     # Invariantes gerais
     for r in recs:
+        if r.item_id in ids_falhados:
+            continue
         if r.answer.strip() == "":
             issues.append(f"{run_dir.name}: resposta vazia em {r.item_id}")
         if "<specific" in r.answer.lower() or "<" in r.answer and ">" in r.answer:
@@ -79,6 +104,9 @@ def audit(run_dir: Path, *, strict: bool = False) -> list[str]:
         print(f"  git_commit: {meta['git_commit']}")
     if meta.get("config_hash_sha256"):
         print(f"  config_hash: {meta['config_hash_sha256'][:12]}…")
+
+    for nota in notes:
+        print(f"  nota: {nota}")
 
     for msg in validate_run_artifacts(run_dir, strict=strict):
         if msg.startswith("aviso:"):
