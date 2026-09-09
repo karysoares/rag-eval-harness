@@ -79,3 +79,40 @@ class TestNaoVazaParaArtefactos:
     @pytest.mark.parametrize("texto", ["erro simples", "timeout após 120s"])
     def test_mensagens_normais_sobrevivem(self, texto: str) -> None:
         assert texto in self._linha(RuntimeError(texto))
+
+
+class TestCredenciaisForaDoFormatoOpenAI:
+    """Formas de credencial que não seguem ``sk-`` nem cabeçalho ``Bearer``.
+
+    ``predictions.jsonl`` publica-se, e vários fornecedores compatíveis
+    autenticam por query-string ou usam prefixos próprios. O padrão tem de
+    apanhar a credencial pelo nome do parâmetro quando a forma do valor não é
+    reconhecível.
+    """
+
+    @pytest.mark.parametrize(
+        "texto",
+        [
+            "HTTP 401 de https://api.provedor.com/v1/chat?api-key=abc123def456ghi789",
+            "HTTP 401 de https://host/v1?key=AIzaSyD-1234567890abcdef",
+            "HTTP 401 de https://host/v1?access_token=zzz999888777666555",
+            "falha com token gsk_9f8e7d6c5b4a3f2e1d0c9b8a7654321",
+            "falha com hf_AbCdEfGhIjKlMnOpQrStUvWxYz012345",
+        ],
+    )
+    def test_credencial_e_mascarada(self, texto: str) -> None:
+        limpo = redact_secrets(texto)
+        for segredo in (
+            "abc123def456ghi789",
+            "AIzaSyD-1234567890abcdef",
+            "zzz999888777666555",
+            "gsk_9f8e7d6c5b4a3f2e1d0c9b8a7654321",
+            "hf_AbCdEfGhIjKlMnOpQrStUvWxYz012345",
+        ):
+            assert segredo not in limpo
+        assert "***" in limpo
+
+    def test_nome_do_parametro_sobrevive(self) -> None:
+        """Diz qual credencial falhou sem revelar o valor."""
+        limpo = redact_secrets("https://host/v1?api-key=abc123def456ghi789")
+        assert "api-key=***" in limpo

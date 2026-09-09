@@ -128,8 +128,19 @@ class ApiUsageSnapshot:
 _SECRET_PATTERNS = (
     # userinfo numa URL: https://utilizador:senha@host
     re.compile(r"(?<=://)[^/\s:@]+:[^/\s@]+@"),
-    # chaves estilo OpenAI/Anthropic e afins
-    re.compile(r"\b(sk|rk|pk)-[A-Za-z0-9_\-]{16,}"),
+    # Credencial passada em query-string. Vários fornecedores compatíveis
+    # autenticam assim (``?api-key=``, ``?key=``, ``?access_token=``) e o valor
+    # não segue nenhum prefixo reconhecível, por isso mascara-se pelo *nome* do
+    # parâmetro em vez de pela forma do segredo.
+    re.compile(
+        r"([?&](?:api[-_]?key|key|apikey|access[-_]?token|token|auth|"
+        r"password|passwd|pwd|secret|sig|signature)=)[^&\s\"']+",
+        re.IGNORECASE,
+    ),
+    # Chaves com prefixo de fornecedor: OpenAI/Anthropic (``sk-``), Groq
+    # (``gsk_``), GitHub (``ghp_``), GitLab (``glpat-``), Hugging Face (``hf_``),
+    # xAI (``xai-``). O separador varia entre ``-`` e ``_``.
+    re.compile(r"\b(sk|rk|pk|gsk|ghp|ghs|gho|glpat|hf|xai|dop|shpat)[-_][A-Za-z0-9_\-]{16,}"),
     re.compile(r"\bBearer\s+[A-Za-z0-9._\-]{16,}"),
 )
 
@@ -143,8 +154,18 @@ def redact_secrets(text: str) -> str:
     entrava aí em claro, e o corpo de resposta de um fornecedor pode ecoar o
     cabeçalho ``Authorization``. Nada disto deve sobreviver à serialização.
     """
+
+    def _substituir(m: re.Match[str]) -> str:
+        if m.group(0).endswith("@"):
+            return "***@"
+        # Quando o padrão isola o nome do parâmetro (``?api-key=``), preserva-se
+        # o nome e mascara-se só o valor: diz qual credencial falhou sem a expor.
+        if m.re.groups and m.group(1) and m.group(1).endswith("="):
+            return f"{m.group(1)}***"
+        return "***"
+
     for padrao in _SECRET_PATTERNS:
-        text = padrao.sub(lambda m: "***@" if m.group(0).endswith("@") else "***", text)
+        text = padrao.sub(_substituir, text)
     return text
 
 
@@ -177,8 +198,13 @@ def _permanent_http_error(response: httpx.Response) -> PermanentApiError:
         detalhe = response.text
     detalhe = " ".join(detalhe.split())[:400]
     sufixo = f": {detalhe}" if detalhe else ""
+    # Só o host: a mensagem acaba em ``meta.processing_error`` dentro de
+    # ``predictions.jsonl``, que se publica. O caminho e a query não acrescentam
+    # diagnóstico — a causa real vem no corpo da resposta — e a query é
+    # precisamente onde alguns fornecedores levam a credencial.
+    host = endpoint_host(str(response.request.url))
     return PermanentApiError(
-        redact_secrets(f"HTTP {response.status_code} de {response.request.url}{sufixo}"),
+        redact_secrets(f"HTTP {response.status_code} de {host}{sufixo}"),
     )
 
 
