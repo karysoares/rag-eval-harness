@@ -310,3 +310,133 @@ def paired_bootstrap_mean_diff(
         "n_pares": n,
         "n_reamostragens": n_resamples,
     }
+
+
+def _percentil_ic(amostras: list[float], *, confidence: float) -> tuple[float, float] | None:
+    """IC percentil sobre reamostragens já ordenáveis."""
+    if not amostras:
+        return None
+    amostras = sorted(amostras)
+    n = len(amostras)
+    alpha = (1.0 - confidence) / 2.0
+    lo = amostras[max(0, int(alpha * n) - 1)]
+    hi = amostras[min(n - 1, int((1.0 - alpha) * n))]
+    return lo, hi
+
+
+def bootstrap_kappa_ci(
+    pares: list[tuple[bool, bool]],
+    *,
+    n_resamples: int = 2000,
+    confidence: float = 0.95,
+    seed: int = 20240517,
+) -> dict[str, Any] | None:
+    """IC bootstrap para o κ de Cohen, reamostrando **itens**.
+
+    O κ era publicado como estimativa pontual, e é a coluna sobre a qual se argumenta
+    a escolha de um juiz. Com N=200 e concordância pouco acima do acaso, o intervalo é
+    largo o suficiente para que dois juízes «diferentes» não sejam distinguíveis — o
+    que é o resultado, e não um detalhe a omitir.
+
+    ``pares`` são ``(juiz_aprovou, referencia_ok)`` por item. Reamostragens em que o κ
+    é indefinido (concordância esperada ≈ 1, isto é, um avaliador constante) são
+    contadas em ``n_reamostragens_degeneradas`` em vez de tratadas como zero: 0,0
+    leria-se como «não concorda além do acaso» quando não havia classe com que
+    concordar.
+    """
+    if not pares:
+        return None
+    n = len(pares)
+    rng = random.Random(seed)
+    amostras: list[float] = []
+    degeneradas = 0
+    for _ in range(n_resamples):
+        tp = fn = fp = tn = 0
+        for _ in range(n):
+            aprovou, ref_ok = pares[rng.randrange(n)]
+            if aprovou and ref_ok:
+                tp += 1
+            elif not aprovou and ref_ok:
+                fn += 1
+            elif aprovou and not ref_ok:
+                fp += 1
+            else:
+                tn += 1
+        k = cohen_kappa(tp, fn, fp, tn)
+        if k is None:
+            degeneradas += 1
+        else:
+            amostras.append(k)
+    ic = _percentil_ic(amostras, confidence=confidence)
+    if ic is None:
+        return None
+    return {
+        "ic_inferior": round(ic[0], 4),
+        "ic_superior": round(ic[1], 4),
+        "confianca": confidence,
+        "n_itens": n,
+        "n_reamostragens": n_resamples,
+        "n_reamostragens_degeneradas": degeneradas,
+    }
+
+
+def bootstrap_ece_ci(
+    pares: list[tuple[float, bool]],
+    *,
+    n_bins: int = 10,
+    n_resamples: int = 2000,
+    confidence: float = 0.95,
+    seed: int = 20240517,
+) -> dict[str, Any] | None:
+    """IC bootstrap para o ECE, reamostrando itens.
+
+    O ECE depende da ocupação dos bins, pelo que com poucos itens por bin o valor
+    pontual é instável. Publicá-lo sem intervalo convida a ordenar juízes por
+    diferenças que o intervalo não sustenta.
+    """
+    usable = [(c, ok) for c, ok in pares if 0.0 <= c <= 1.0]
+    if not usable:
+        return None
+    n = len(usable)
+    rng = random.Random(seed)
+    amostras: list[float] = []
+    for _ in range(n_resamples):
+        reamostra = [usable[rng.randrange(n)] for _ in range(n)]
+        res = expected_calibration_error(reamostra, n_bins=n_bins)
+        if res is not None:
+            amostras.append(float(res["ece"]))
+    ic = _percentil_ic(amostras, confidence=confidence)
+    if ic is None:
+        return None
+    return {
+        "ic_inferior": round(ic[0], 4),
+        "ic_superior": round(ic[1], 4),
+        "confianca": confidence,
+        "n_itens": n,
+        "n_reamostragens": n_resamples,
+    }
+
+
+def holm_bonferroni(p_valores: list[float]) -> list[float]:
+    """Correcção de Holm-Bonferroni para comparações múltiplas.
+
+    Com quatro braços comparam-se seis pares ao mesmo tempo; a 5% por par, a
+    probabilidade de ao menos um falso positivo na família aproxima-se de 26%.
+    Holm é uniformemente mais potente do que Bonferroni e não assume independência,
+    o que é o caso aqui: os pares partilham braços.
+
+    Devolve os p ajustados na ordem de entrada, monótonos e limitados a 1,0. Sem
+    arredondamento: um p de 1e-14 arredondado a seis casas torna-se 0,0 e perde
+    precisamente a informação que distingue um efeito forte de um exacto.
+    """
+    m = len(p_valores)
+    if m == 0:
+        return []
+    indexados = sorted(enumerate(p_valores), key=lambda t: t[1])
+    ajustados = [0.0] * m
+    corrente = 0.0
+    for posicao, (indice, p) in enumerate(indexados):
+        candidato = (m - posicao) * p
+        corrente = max(corrente, min(1.0, candidato))
+        ajustados[indice] = corrente
+    return ajustados

@@ -695,7 +695,16 @@ def pairwise_paired_significance(
     flags_por_corrida: dict[str, dict[str, bool]],
     falhas_por_corrida: dict[str, set[str]] | None = None,
 ) -> list[dict[str, object]]:
-    """Aplica :func:`paired_significance` a todos os pares de corridas."""
+    """Aplica :func:`paired_significance` a todos os pares, com correcção de Holm.
+
+    Com quatro braços saem seis comparações da mesma família. A 5% por par, a
+    probabilidade de ao menos um falso positivo aproxima-se de 26%, pelo que
+    `significativo_95` por par isolado passa a acompanhar-se de
+    `significativo_95_familia`, calculado sobre os p ajustados. Os dois ficam no
+    artefacto: o p bruto é o do teste, o ajustado é o que a família admite.
+    """
+    from llm_evaluation.statistics import holm_bonferroni
+
     falhas = falhas_por_corrida or {}
     labels = list(flags_por_corrida)
     out: list[dict[str, object]] = []
@@ -711,6 +720,18 @@ def pairwise_paired_significance(
             )
             if res is not None:
                 out.append(res)
+
+    with_p = [
+        (i, float(mc["p_valor"]))
+        for i, r in enumerate(out)
+        if isinstance(mc := r.get("mcnemar"), dict) and isinstance(mc.get("p_valor"), float)
+    ]
+    if len(with_p) > 1:
+        ajustados = holm_bonferroni([p for _, p in with_p])
+        for (i, _), p_aj in zip(with_p, ajustados, strict=True):
+            out[i]["p_valor_ajustado_holm"] = p_aj
+            out[i]["significativo_95_familia"] = p_aj < 0.05
+            out[i]["n_comparacoes_na_familia"] = len(with_p)
     return out
 
 

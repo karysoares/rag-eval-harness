@@ -33,6 +33,8 @@ from typing import Any, cast
 from llm_evaluation.config import VerificationConfig
 from llm_evaluation.reference_metrics import referencia_humana_incorreta, referencia_incorreta
 from llm_evaluation.statistics import (
+    bootstrap_ece_ci,
+    bootstrap_kappa_ci,
     cohen_kappa,
     expected_calibration_error,
     fleiss_kappa,
@@ -222,6 +224,11 @@ def judge_calibration(
         return None
     if n_sem_confianca:
         out["n_excluidos_sem_confianca"] = n_sem_confianca
+    # O ECE depende da ocupação dos bins: sem intervalo, ordenar juízes por ECE
+    # atribui significado a diferenças que o intervalo não sustenta.
+    ic = bootstrap_ece_ci(pares, n_bins=n_bins)
+    if ic is not None:
+        out["ece_ic95_bootstrap"] = ic
     out["nota"] = (
         "Exatidão = concordância entre veredito do juiz e referência. ECE alto com "
         "exatidão alta significa juiz útil mas com confiança pouco informativa — "
@@ -240,11 +247,13 @@ def judge_agreement(
     """Concordância do juiz com a referência: matriz 2×2, κ e IC de Wilson na exatidão."""
     pol = polarity or JudgePolarity()
     tp = fn = fp = tn = 0
+    pares: list[tuple[bool, bool]] = []
     for r in _judged(records):
         ref_ok = _referencia_ok(r, reference_type, f1_fraca_min=f1_fraca_min)
         if ref_ok is None:
             continue
         aprovou = _aprovou(r, pol)
+        pares.append((aprovou, ref_ok))
         if aprovou and ref_ok:
             tp += 1
         elif not aprovou and ref_ok:
@@ -257,6 +266,7 @@ def judge_agreement(
     if n == 0:
         return None
     acertos = tp + tn
+    ic_kappa = bootstrap_kappa_ci(pares)
     return {
         "n_itens_com_referencia": n,
         "confusao": {
@@ -268,9 +278,13 @@ def judge_agreement(
         "exatidao": acertos / n,
         "exatidao_ic95_wilson": wilson_ci(acertos, n),
         "cohen_kappa": cohen_kappa(tp, fn, fp, tn),
+        # Sem intervalo, o κ convida a ordenar juízes por diferenças que N=200 não
+        # resolve. Publicar o intervalo é o que torna a comparação interpretável.
+        "cohen_kappa_ic95_bootstrap": ic_kappa,
         "nota": (
             "Referência humana (HITL) tem precedência sobre a referência automática "
-            "quando ambas existem para o item."
+            "quando ambas existem para o item. O κ traz IC bootstrap: intervalos que "
+            "se sobrepõem significam juízes não distinguíveis neste N."
         ),
     }
 
