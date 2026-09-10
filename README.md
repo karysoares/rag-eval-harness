@@ -20,18 +20,21 @@ Retrieval, generation, grounding, LLM-as-judge with calibration and bias probes,
 
 Most RAG evaluation tools score the answer. This one also scores **the thing doing the scoring** — because an LLM judge is an instrument, and an instrument that nobody characterised produces numbers nobody should act on.
 
-Four judges over the same 200 items, measured with the harness itself:
+Four judges over the same 200 items, measured with the harness itself. κ and ECE carry bootstrap intervals, because they are the columns a judge choice would be argued on:
 
-| judge | accuracy | κ | ECE | mean confidence | s/item |
+| judge | accuracy | κ (95% CI) | ECE (95% CI) | mean confidence | s/item |
 |---|---|---|---|---|---|
-| `gpt-4o` | 0.561 | −0.028 | 0.421 | 0.982 | 11.7 |
-| `gpt-4o-mini` | 0.575 | −0.006 | 0.399 | 0.974 | 3.0 |
-| `gpt-5.4-nano` | **0.610** | 0.092 | **0.296** | 0.906 | **2.5** |
-| `qwen2.5` (local, free) † | 0.585 | **0.190** | 0.366 | 0.911 | 33.7 |
+| `gpt-4o` | 0.561 | −0.028 [−0.081, +0.020] | 0.421 [0.351, 0.493] | 0.982 | 11.7 |
+| `gpt-4o-mini` ‡ | 0.575 | −0.006 [−0.046, +0.032] | 0.399 [0.332, 0.465] | 0.974 | 3.0 |
+| `gpt-5.4-nano` | **0.610** | 0.092 [+0.004, +0.183] | **0.296** [0.234, 0.360] | 0.906 | **2.5** |
+| `qwen2.5` (local, free) † | 0.585 | 0.190 [+0.074, +0.308] | 0.366 [0.298, 0.434] | 0.911 | 33.7 |
 
-Every one of them declares 0.91–0.98 confidence while being right 56–61% of the time, so none can be used for confidence-based triage. The most expensive is last on every column. None of that is visible from an accuracy score alone — [see how it is measured](#judge-meta-evaluation).
+Three things the intervals say that the point estimates hid. Two of the four judges have a κ interval containing zero — on this reference they do not agree with it beyond chance at all. The remaining two overlap each other, so **no judge here is demonstrably more discriminative than another** at N=200. And every judge declares 0.91–0.98 confidence while being right 56–61% of the time, so none supports confidence-based triage. The most expensive is last on accuracy, calibration and speed.
 
-† The local arm ran a local generator (`llama3.2`) as well as a local judge, so its row is not a clean judge-only contrast with the three API arms — read it as a cost/latency data point, not as evidence that the local judge discriminates better.
+That is the point of the exercise: the ranking a naive table would invite is not supported, and it takes an interval to see it. [How it is measured](#judge-meta-evaluation).
+
+† The local arm ran a local generator (`llama3.2`) as well as a local judge, so this row varies judge and generator together and is not a clean judge-only contrast — read it as a cost/latency data point. Re-running it with the shared generator is tracked; until then no claim rests on it.
+‡ Self-evaluation: here the judge is the model that produced the answer (`protocolo_ativo.models.judge_same_as_generator`). A model grading its own output tends to prefer it, so this row is not cleanly comparable with the others either.
 
 Underneath is a **corpus-agnostic** harness: every dataset is an adapter, and the core measures retrieval, generation and verification as independent layers. The bundled reference case is **FairytaleQA pt-BR** ([`benjleite/FairytaleQA-translated-ptBR`](https://huggingface.co/datasets/benjleite/FairytaleQA-translated-ptBR)).
 
@@ -43,12 +46,12 @@ Underneath is a **corpus-agnostic** harness: every dataset is an adapter, and th
 
 Retrieval metrics are **diagnostic**. Post-answer signals (embedding, judge, lexical reference) stay **separate** until the aggregation policy declared in YAML — there is no single universal score.
 
-The prompts, the judge rubric and the reference corpus are Portuguese; the code, configuration and reports are language-neutral.
+**Scope, stated plainly.** The harness is language-neutral: code, configuration, metrics and reports carry no language assumption, and the lexical normalisation takes the corpus language as a parameter (`metricas_lexicas.idioma`). What is Portuguese is the *bundled reference case* — its prompts, its judge rubric and its corpus. That corpus is translated children's narrative (pt-BR), which is a narrow slice of the language: there is no pt-PT corpus here, no adult or professional domain, and the pt-PT/pt-BR orthographic split (`facto`/`fato`, `acção`/`ação`) is **not** handled by the lexical normaliser, so a correct pt-PT answer scores lower against a pt-BR gold. Treat the Portuguese case as a worked example of the method, not as a benchmark for Portuguese.
 
 ## Features
 
 - Reproducible pipeline driven by YAML (`configs/`)
-- Multi-layer verification: embedding (grounding), Portuguese RAG judge, lexical reference (F1, ROUGE-L, METEOR)
+- Multi-layer verification: embedding (grounding), LLM judge (Portuguese RAG rubric or a domain-neutral one), lexical reference (F1, ROUGE-L; METEOR opt-in, see below)
 - Configurable aggregation policies (`embedding_e_juiz`, `qualquer_critico`, …)
 - Deterministic patterns and a human review queue (HITL)
 - **Judge meta-evaluation**: calibration, agreement, verbosity/position bias probes, self-consistency
@@ -154,6 +157,10 @@ Audit: `uv run python scripts/audit_run.py outputs --strict`
 
 Aggregation policies: `qualquer_critico`, `embedding_e_juiz`, `todos_criticos`. Reference types: `lexical`, `answer_lists`, `none` (key `dataset.reference_type`).
 
+**Lexical metrics and language.** `metricas_lexicas.idioma` selects the normalisation: `pt` (default, the reference case) or `en`, which reproduces the official SQuAD protocol byte for byte so published English results stay comparable. The ROUGE tokenizer is Unicode-aware — the library's default splits every accented word — and normalisation separates on hyphens rather than gluing enclisis (`deu-lhe` → `deu lhe`).
+
+**METEOR is off by default, deliberately.** It needs the NLTK `wordnet` corpus, which `uv sync` does not install, and without it METEOR only scores near-identical pairs. Its mean was therefore computed over the easiest 2% of items and published beside the full N. Enabling it now requires the corpus (`python -m nltk.downloader wordnet omw-1.4`); `validate_protocol` refuses `meteor: true` without it, before the first paid call. Every mean in `sumario_lexical` also carries its own denominator in `n_por_metrica`, because different metrics fail on different items.
+
 ## Dashboard
 
 ```bash
@@ -198,16 +205,18 @@ Presets for Ollama, vLLM, DeepSeek, DashScope and OpenRouter are in [`.env.examp
 
 **Choose a judge with the harness, not with intuition.** Four judges over the same 200 items (`configs/ptbr_fairytale_judge_ab.yaml`, paired by `id_item`). The three API arms share the `gpt-4o-mini` generator; the local arm generated with `llama3.2` on the same local endpoint, which confounds judge with generator in that row:
 
-| judge | n | accuracy | κ | ECE | mean conf. | `sustentado` | s/item |
+| judge | n | accuracy | κ (95% CI) | ECE (95% CI) | mean conf. | `sustentado` | s/item |
 |---|---|---|---|---|---|---|---|
-| `gpt-4o` | 189 | 0.561 | −0.028 | 0.421 | 0.982 | 86.2% | 11.7 |
-| `gpt-4o-mini` | 200 | 0.575 | −0.006 | 0.399 | 0.974 | 78.0% | 3.0 |
-| **`gpt-5.4-nano`** | 200 | **0.610** | 0.092 | **0.296** | 0.906 | 76.5% | **2.5** |
-| `qwen2.5` (Ollama) † | 200 | 0.585 | **0.190** | 0.366 | 0.911 | 59.5% | 33.7 |
+| `gpt-4o` | 189 | 0.561 | −0.028 [−0.081, +0.020] | 0.421 [0.351, 0.493] | 0.982 | 86.2% | 11.7 |
+| `gpt-4o-mini` ‡ | 200 | 0.575 | −0.006 [−0.046, +0.032] | 0.399 [0.332, 0.465] | 0.974 | 78.0% | 3.0 |
+| **`gpt-5.4-nano`** | 200 | **0.610** | 0.092 [+0.004, +0.183] | **0.296** [0.234, 0.360] | 0.906 | 76.5% | **2.5** |
+| `qwen2.5` (Ollama) † | 200 | 0.585 | 0.190 [+0.074, +0.308] | 0.366 [0.298, 0.434] | 0.911 | 59.5% | 33.7 |
 
-No pair differs significantly on alert rate (all p=1 after excluding execution failures). Read the columns separately: accuracy and κ are measured against a *lexical* reference, which asks a different question than the judge does, so κ near zero means the two signals are independent rather than that the judge is wrong. Calibration is unambiguous — every judge declares 0.91–0.98 confidence while being right 56–61% of the time, so `confianca` is not usable as a triage threshold.
+Intervals are bootstrap over items (`bootstrap_kappa_ci`, `bootstrap_ece_ci`). They change how the table reads: `gpt-4o` and `gpt-4o-mini` have κ intervals spanning zero, and the two positive κ intervals overlap, so the apparent ordering by κ is not supported at this N. Only the ECE gap between `gpt-5.4-nano` and `gpt-4o` is close to resolvable.
 
-The costly model is not the good one: `gpt-4o` is last on every column and 9.3× the price of `gpt-4o-mini`, and that comparison *is* clean — both arms share the generator. † The local arm changed two variables at once (judge **and** generator), so its higher κ and lower approval rate are equally consistent with a weaker generator producing weaker answers. Re-running it with `gpt-4o-mini` as the generator is the open item; until then the row stands as a cost and latency measurement only.
+No pair differs significantly on alert rate (all p=1 after excluding execution failures, and Holm-adjusted across the six simultaneous comparisons — four arms produce a family, not six independent tests). Read the columns separately: accuracy and κ are measured against a *lexical* reference, which asks a different question than the judge does, so κ near zero means the two signals are independent rather than that the judge is wrong. Calibration is unambiguous — every judge declares 0.91–0.98 confidence while being right 56–61% of the time, so `confianca` is not usable as a triage threshold.
+
+The costly model is not the good one: `gpt-4o` is last on every column and 9.3× the price of `gpt-4o-mini`. ‡ That comparison is *almost* clean — both arms share the generator, but in the `gpt-4o-mini` arm the judge **is** the generator, so it is a self-evaluation and a model grading its own output tends to prefer it. † The local arm changed two variables at once (judge **and** generator), so its higher κ and lower approval rate are equally consistent with a weaker generator producing weaker answers. Re-running it with `gpt-4o-mini` as the generator is the open item; until then the row stands as a cost and latency measurement only.
 
 Full aggregates, including per-model token usage and the paired tests: [`docs/evidencia/judge_ab_fairytale_200.json`](docs/evidencia/judge_ab_fairytale_200.json).
 
@@ -283,21 +292,23 @@ llm:
   concurrency: 4     # 1 = sequential (default)
 ```
 
-Measured with a 150 ms mock per call, 60 items over 10 documents (`generator + judge` per item — the shape of FairytaleQA):
+Measured with `scripts/bench_concurrency.py`: a 150 ms mock per call, 60 items over 10 documents, two calls per item (generator + judge — the shape of FairytaleQA). Reproduce with `uv run python scripts/bench_concurrency.py`; recorded output in [`docs/evidencia/bench_concorrencia.json`](docs/evidencia/bench_concorrencia.json).
 
 | Concurrency | Time | Speedup |
 |---|---|---|
-| 1 (default) | 19.0 s | 1.0× |
-| 4 | 4.8 s | 4.0× |
-| 8 | 2.6 s | 7.3× |
+| 1 (default) | 18.95 s | 1.0× |
+| 4 | 4.76 s | 3.98× |
+| 8 | 2.56 s | 7.40× |
+
+The mock measures latency overlap between items, not model speed, so the speedup is a ceiling — reachable only until the provider starts rate-limiting.
 
 Three optimisations carry this:
 
 | Optimisation | Where | Effect |
 |---|---|---|
 | Item pool | `pipeline.run_batch` | overlaps API latency across items |
-| Keep-alive HTTP pool | `llm_client.OpenAiCompatibleClient` | removes one TLS handshake per call (~2000 in a 1025-item run) |
-| Embedding cache | `retrieval.CachingEmbedder` | 84.8% hit rate in the scenario above; deduplicates chunks across items and between retrieval and verification |
+| Keep-alive HTTP pool | `llm_client.OpenAiCompatibleClient` | removes one TLS handshake per call (~2050 in a 1025-item run — *derived*: 2 calls × 1025 items, not measured) |
+| Embedding cache | `retrieval.CachingEmbedder` | 84.7% hit rate in the scenario above (508 hits / 92 misses, identical at every concurrency); deduplicates chunks across items and between retrieval and verification |
 
 Raising concurrency raises rate-limit pressure; the client backs off with jitter and honours `Retry-After`. Token and latency accounting is thread-local, so `meta.observabilidade` stays per-item.
 

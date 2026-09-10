@@ -20,18 +20,21 @@ Recuperação, geração, grounding, juiz LLM com calibração e sondas de viés
 
 A maioria das ferramentas de avaliação RAG pontua a resposta. Esta também pontua **quem está a pontuar** — porque um juiz LLM é um instrumento, e um instrumento que ninguém caracterizou produz números sobre os quais ninguém devia decidir.
 
-Quatro juízes sobre os mesmos 200 itens, medidos com o próprio harness:
+Quatro juízes sobre os mesmos 200 itens, medidos com o próprio harness. κ e ECE levam intervalos bootstrap, porque são as colunas sobre as quais a escolha de um juiz se argumentaria:
 
-| juiz | exatidão | κ | ECE | confiança média | s/item |
+| juiz | exatidão | κ (IC 95%) | ECE (IC 95%) | confiança média | s/item |
 |---|---|---|---|---|---|
-| `gpt-4o` | 0,561 | −0,028 | 0,421 | 0,982 | 11,7 |
-| `gpt-4o-mini` | 0,575 | −0,006 | 0,399 | 0,974 | 3,0 |
-| `gpt-5.4-nano` | **0,610** | 0,092 | **0,296** | 0,906 | **2,5** |
-| `qwen2.5` (local, gratuito) † | 0,585 | **0,190** | 0,366 | 0,911 | 33,7 |
+| `gpt-4o` | 0,561 | −0,028 [−0,081, +0,020] | 0,421 [0,351, 0,493] | 0,982 | 11,7 |
+| `gpt-4o-mini` ‡ | 0,575 | −0,006 [−0,046, +0,032] | 0,399 [0,332, 0,465] | 0,974 | 3,0 |
+| `gpt-5.4-nano` | **0,610** | 0,092 [+0,004, +0,183] | **0,296** [0,234, 0,360] | 0,906 | **2,5** |
+| `qwen2.5` (local, gratuito) † | 0,585 | 0,190 [+0,074, +0,308] | 0,366 [0,298, 0,434] | 0,911 | 33,7 |
 
-Todos declaram confiança de 0,91–0,98 acertando 56–61%, portanto nenhum serve para triagem por confiança. O mais caro é último em todas as colunas. Nada disto se vê a partir de uma pontuação de exatidão — [ver como é medido](#meta-avaliação-do-juiz).
+Três coisas que os intervalos dizem e as estimativas pontuais escondiam. Dois dos quatro juízes têm intervalo de κ a conter zero — nesta referência não concordam com ela além do acaso. Os outros dois sobrepõem-se entre si, pelo que **nenhum juiz aqui é demonstravelmente mais discriminativo do que outro** com N=200. E todos declaram confiança de 0,91–0,98 acertando 56–61%, portanto nenhum serve para triagem por confiança. O mais caro é último em exatidão, calibração e velocidade.
 
-† O braço local correu com gerador local (`llama3.2`) além do juiz local, pelo que a sua linha não é um contraste só de juiz face aos três braços de API — leia-se como ponto de custo e latência, não como prova de que o juiz local discrimina melhor.
+É esse o ponto do exercício: a ordenação que uma tabela ingénua convidaria a fazer não se sustenta, e é preciso um intervalo para o ver. [Ver como é medido](#meta-avaliação-do-juiz).
+
+† O braço local correu com gerador local (`llama3.2`) além do juiz local, pelo que esta linha varia juiz e gerador ao mesmo tempo e não é um contraste só de juiz — leia-se como ponto de custo e latência. Re-correr com o gerador partilhado está em curso; até lá nenhuma afirmação assenta nela.
+‡ Auto-avaliação: aqui o juiz é o modelo que produziu a resposta (`protocolo_ativo.models.judge_same_as_generator`). Um modelo a corrigir o seu próprio trabalho tende a preferi-lo, pelo que esta linha também não é comparável de forma limpa com as restantes.
 
 Por baixo está um harness **agnóstico ao corpus**: cada dataset é um adaptador; o núcleo mede recuperação, geração e verificação em camadas independentes. O caso de referência incluído é **FairytaleQA pt-BR** ([`benjleite/FairytaleQA-translated-ptBR`](https://huggingface.co/datasets/benjleite/FairytaleQA-translated-ptBR)).
 
@@ -43,10 +46,12 @@ Por baixo está um harness **agnóstico ao corpus**: cada dataset é um adaptado
 
 Métricas de recuperação são **diagnósticas**. Sinais pós-resposta (embedding, juiz, referência léxica) permanecem **separados** até à política de agregação no YAML — não há um único score universal.
 
+**Âmbito, dito sem rodeios.** O harness é neutro quanto à língua: código, configuração, métricas e relatórios não assumem língua nenhuma, e a normalização léxica recebe a língua do corpus como parâmetro (`metricas_lexicas.idioma`). Português é o *caso de referência incluído* — os seus prompts, a sua rubrica de juiz e o seu corpus. Esse corpus é narrativa infantil traduzida (pt-BR), que é uma fatia estreita da língua: não há aqui corpus pt-PT, nem domínio adulto ou profissional, e a divergência ortográfica pt-PT/pt-BR (`facto`/`fato`, `acção`/`ação`) **não** é tratada pelo normalizador léxico, pelo que uma resposta correcta em pt-PT pontua abaixo contra ouro pt-BR. O caso português é um exemplo trabalhado do método, não um benchmark para português.
+
 ## Features
 
 - Pipeline reprodutível via YAML (`configs/`)
-- Verificação multicamada: embedding (grounding), juiz RAG em português, referência léxica (F1, ROUGE-L, METEOR)
+- Verificação multicamada: embedding (grounding), juiz LLM (rubrica RAG portuguesa ou uma neutra quanto ao domínio), referência léxica (F1, ROUGE-L; METEOR por opção explícita, ver abaixo)
 - Políticas de agregação configuráveis (`embedding_e_juiz`, `qualquer_critico`, …)
 - Padrões determinísticos e fila de revisão humana (HITL)
 - **Meta-avaliação do juiz**: calibração, concordância, sondas de viés e auto-consistência
@@ -150,6 +155,10 @@ Auditoria: `uv run python scripts/audit_run.py outputs --strict`
 
 Políticas de agregação: `qualquer_critico`, `embedding_e_juiz`, `todos_criticos`. Tipos de referência: `lexical`, `answer_lists`, `none` (chave `dataset.reference_type`).
 
+**Métricas léxicas e língua.** `metricas_lexicas.idioma` escolhe a normalização: `pt` (por omissão, o caso de referência) ou `en`, que reproduz o protocolo oficial do SQuAD byte a byte para que resultados ingleses publicados continuem comparáveis. O tokenizador do ROUGE é Unicode — o da biblioteca parte toda a palavra acentuada — e a normalização separa nos hífenes em vez de colar a ênclise (`deu-lhe` → `deu lhe`).
+
+**O METEOR vem desligado, de propósito.** Precisa do corpus `wordnet` do NLTK, que o `uv sync` não instala, e sem ele só pontua pares quase idênticos. A sua média era por isso calculada sobre os 2% de itens mais fáceis e publicada ao lado do N completo. Ligá-lo exige agora o recurso (`python -m nltk.downloader wordnet omw-1.4`); `validate_protocol` recusa `meteor: true` sem ele, antes da primeira chamada paga. Cada média em `sumario_lexical` leva também o seu próprio denominador em `n_por_metrica`, porque métricas diferentes falham em itens diferentes.
+
 ## Dashboard
 
 ```bash
@@ -194,16 +203,18 @@ Presets para Ollama, vLLM, DeepSeek, DashScope e OpenRouter em [`.env.example`](
 
 **Escolha o juiz com o harness, não por intuição.** Quatro juízes sobre os mesmos 200 itens (`configs/ptbr_fairytale_judge_ab.yaml`, emparelhados por `id_item`). Os três braços de API partilham o gerador `gpt-4o-mini`; o braço local gerou com `llama3.2` no mesmo endpoint local, o que confunde juiz com gerador nessa linha:
 
-| juiz | n | exatidão | κ | ECE | conf. média | `sustentado` | s/item |
+| juiz | n | exatidão | κ (IC 95%) | ECE (IC 95%) | conf. média | `sustentado` | s/item |
 |---|---|---|---|---|---|---|---|
-| `gpt-4o` | 189 | 0,561 | −0,028 | 0,421 | 0,982 | 86,2% | 11,7 |
-| `gpt-4o-mini` | 200 | 0,575 | −0,006 | 0,399 | 0,974 | 78,0% | 3,0 |
-| **`gpt-5.4-nano`** | 200 | **0,610** | 0,092 | **0,296** | 0,906 | 76,5% | **2,5** |
-| `qwen2.5` (Ollama) † | 200 | 0,585 | **0,190** | 0,366 | 0,911 | 59,5% | 33,7 |
+| `gpt-4o` | 189 | 0,561 | −0,028 [−0,081, +0,020] | 0,421 [0,351, 0,493] | 0,982 | 86,2% | 11,7 |
+| `gpt-4o-mini` ‡ | 200 | 0,575 | −0,006 [−0,046, +0,032] | 0,399 [0,332, 0,465] | 0,974 | 78,0% | 3,0 |
+| **`gpt-5.4-nano`** | 200 | **0,610** | 0,092 [+0,004, +0,183] | **0,296** [0,234, 0,360] | 0,906 | 76,5% | **2,5** |
+| `qwen2.5` (Ollama) † | 200 | 0,585 | 0,190 [+0,074, +0,308] | 0,366 [0,298, 0,434] | 0,911 | 59,5% | 33,7 |
 
-Nenhum par difere significativamente na taxa de alerta (todos p=1 depois de excluir falhas de execução). As colunas leem-se em separado: exatidão e κ são medidos contra uma referência *léxica*, que faz uma pergunta diferente da do juiz, por isso κ perto de zero significa que os dois sinais são independentes e não que o juiz erra. A calibração é inequívoca — todos declaram confiança de 0,91–0,98 acertando 56–61%, portanto `confianca` não serve de limiar de triagem.
+Os intervalos são bootstrap sobre itens (`bootstrap_kappa_ci`, `bootstrap_ece_ci`) e mudam a leitura da tabela: `gpt-4o` e `gpt-4o-mini` têm intervalos de κ a atravessar zero, e os dois intervalos positivos sobrepõem-se, pelo que a ordenação aparente por κ não se sustenta com este N. Só a diferença de ECE entre `gpt-5.4-nano` e `gpt-4o` está perto de ser resolúvel.
 
-O modelo caro não é o bom: o `gpt-4o` fica último em todas as colunas e custa 9,3× o `gpt-4o-mini` — e essa comparação *é* limpa, porque os dois braços partilham o gerador. † O braço local mudou duas variáveis ao mesmo tempo (juiz **e** gerador), portanto o κ mais alto e a menor taxa de aprovação são igualmente compatíveis com um gerador mais fraco a produzir respostas mais fracas. Repeti-lo com `gpt-4o-mini` como gerador é o ponto em aberto; até lá a linha vale como medição de custo e latência.
+Nenhum par difere significativamente na taxa de alerta (todos p=1 depois de excluir falhas de execução, e com ajuste de Holm nas seis comparações simultâneas — quatro braços formam uma família, não seis testes independentes). As colunas leem-se em separado: exatidão e κ são medidos contra uma referência *léxica*, que faz uma pergunta diferente da do juiz, por isso κ perto de zero significa que os dois sinais são independentes e não que o juiz erra. A calibração é inequívoca — todos declaram confiança de 0,91–0,98 acertando 56–61%, portanto `confianca` não serve de limiar de triagem.
+
+O modelo caro não é o bom: o `gpt-4o` fica último em todas as colunas e custa 9,3× o `gpt-4o-mini`. ‡ Essa comparação é *quase* limpa — os dois braços partilham o gerador, mas no braço `gpt-4o-mini` o juiz **é** o gerador, logo é auto-avaliação, e um modelo a corrigir o seu próprio trabalho tende a preferi-lo. † O braço local mudou duas variáveis ao mesmo tempo (juiz **e** gerador), portanto o κ mais alto e a menor taxa de aprovação são igualmente compatíveis com um gerador mais fraco a produzir respostas mais fracas. Repeti-lo com `gpt-4o-mini` como gerador é o ponto em aberto; até lá a linha vale como medição de custo e latência.
 
 Agregados completos, com uso de tokens por modelo e os testes emparelhados: [`docs/evidencia/judge_ab_fairytale_200.json`](docs/evidencia/judge_ab_fairytale_200.json).
 
@@ -282,22 +293,23 @@ llm:
   concurrency: 4     # 1 = sequencial (padrão)
 ```
 
-Medido com mock de 150 ms por chamada, 60 itens sobre 10 documentos
-(`gerador + juiz` por item — a forma do FairytaleQA):
+Medido com `scripts/bench_concurrency.py`: mock de 150 ms por chamada, 60 itens sobre 10 documentos, duas chamadas por item (gerador + juiz — a forma do FairytaleQA). Reproduzir com `uv run python scripts/bench_concurrency.py`; saída gravada em [`docs/evidencia/bench_concorrencia.json`](docs/evidencia/bench_concorrencia.json).
 
 | Concorrência | Tempo | Aceleração |
 |---|---|---|
-| 1 (padrão) | 19,0 s | 1,0× |
-| 4 | 4,8 s | 4,0× |
-| 8 | 2,6 s | 7,3× |
+| 1 (padrão) | 18,95 s | 1,0× |
+| 4 | 4,76 s | 3,98× |
+| 8 | 2,56 s | 7,40× |
+
+O mock mede a sobreposição de latência entre itens, não a velocidade do modelo, pelo que a aceleração é um tecto — atingível só enquanto o fornecedor não impuser limite de taxa.
 
 Três otimizações sustentam isto:
 
 | Otimização | Onde | Efeito |
 |---|---|---|
 | Pool de itens | `pipeline.run_batch` | sobrepõe a latência de API entre itens |
-| Pool HTTP keep-alive | `llm_client.OpenAiCompatibleClient` | elimina 1 handshake TLS por chamada (~2000 numa corrida de 1025 itens) |
-| Cache de embeddings | `retrieval.CachingEmbedder` | 84,8% de acerto no cenário acima; deduplica chunks entre itens e entre recuperação e verificação |
+| Pool HTTP keep-alive | `llm_client.OpenAiCompatibleClient` | elimina 1 handshake TLS por chamada (~2050 numa corrida de 1025 itens — *derivado*: 2 chamadas × 1025 itens, não medido) |
+| Cache de embeddings | `retrieval.CachingEmbedder` | 84,7% de acerto no cenário acima (508 acertos / 92 faltas, igual em qualquer concorrência); deduplica chunks entre itens e entre recuperação e verificação |
 
 Subir a concorrência aumenta a pressão sobre o rate limit; o cliente faz backoff com
 jitter e respeita `Retry-After`. Contabilização de tokens e latência é thread-local,

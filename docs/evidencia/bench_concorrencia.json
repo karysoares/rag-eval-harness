@@ -1,0 +1,47 @@
+{
+  "cenario": {
+    "n_itens": 60,
+    "n_documentos": 10,
+    "latencia_por_chamada_s": 0.15,
+    "chamadas_por_item": 2,
+    "backend_embeddings": "hash",
+    "nota": "Mock de latência fixa: mede sobreposição de latência entre itens, nao velocidade de modelo. O ganho e um tecto, atingivel so enquanto o fornecedor nao impuser limite de taxa."
+  },
+  "resultados": [
+    {
+      "concorrencia": 1,
+      "segundos": 18.93,
+      "n_chamadas": 120,
+      "ganho": 1.0
+    },
+    {
+      "concorrencia": 4,
+      "segundos": 4.77,
+      "n_chamadas": 120,
+      "ganho": 3.97
+    },
+    {
+      "concorrencia": 8,
+      "segundos": 2.55,
+      "n_chamadas": 120,
+      "ganho": 7.42
+    }
+  ],
+  "cache_embeddings": {
+    "1": {
+      "embeddings_cache_hits": 508,
+      "embeddings_cache_misses": 92,
+      "embeddings_cache_taxa_acerto": 0.8467
+    },
+    "4": {
+      "embeddings_cache_hits": 508,
+      "embeddings_cache_misses": 92,
+      "embeddings_cache_taxa_acerto": 0.8467
+    },
+    "8": {
+      "embeddings_cache_hits": 508,
+      "embeddings_cache_misses": 92,
+      "embeddings_cache_taxa_acerto": 0.8467
+    }
+  }
+}

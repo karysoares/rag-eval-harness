@@ -18,6 +18,7 @@ Publicar a partir de uma corrida: `uv run python scripts/publish_run_evidence.py
 | [`judge_ab_fairytale_200.json`](judge_ab_fairytale_200.json) | A/B de quatro juízes sobre os mesmos itens: exactidão, κ, ECE, confiança, custo por modelo, seis testes emparelhados. Cada braço declara o seu gerador e se o juiz é auto-referente. | 200 |
 | [`ablacao_hotpotqa_100.json`](ablacao_hotpotqa_100.json) | Ablação recuperação → geração (SPEC-013): o KPI ingénuo inverte o sentido do efeito. | 100 queries |
 | [`embedding_sweep_fairytale_200.json`](embedding_sweep_fairytale_200.json) · [`.csv`](embedding_sweep_fairytale_200.csv) | Curva FP/FN/precisão/revocação de `embedding_min_cosine` de 0,10 a 0,50. Mostra que não há ótimo — ver [`../calibracao_embedding.md`](../calibracao_embedding.md). | 200 |
+| [`bench_concorrencia.json`](bench_concorrencia.json) | Ganho de concorrência e acerto da cache de embeddings, com o cenário declarado. Regenerar: `make bench`. | 60 itens |
 | [`run_ci_fixture_protocolo.json`](run_ci_fixture_protocolo.json) | `protocolo_ativo` + `detector_activo` da fixture de CI. | 1 |
 | [`run_ci_fixture_kpi_lexical.json`](run_ci_fixture_kpi_lexical.json) | KPIs da mesma fixture. Todos `null`: a fixture corre com as camadas de verificação desligadas. | 1 |
 
