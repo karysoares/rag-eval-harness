@@ -12,9 +12,11 @@ from llm_evaluation.operational import OperationalThresholds
 from llm_evaluation.squad_metrics import Idioma
 
 AggregationPolicy = Literal["qualquer_critico", "todos_criticos", "embedding_e_juiz"]
-#: `generic` é agnóstico ao corpus e em inglês; os outros dois assumem
-#: narrativa em português. Ver `docs/specs/003-judge.md`.
-JudgePromptStyle = Literal["pt", "rag_pt", "generic"]
+#: `generic` é agnóstico ao corpus e em inglês; `generic_pt` é agnóstico ao
+#: corpus **e** em português — fecha a escolha forçada entre língua e
+#: neutralidade de domínio que a SPEC-003 registava como lacuna. `pt` e
+#: `rag_pt` assumem narrativa em português. Ver `docs/specs/003-judge.md`.
+JudgePromptStyle = Literal["pt", "rag_pt", "generic", "generic_pt"]
 Orchestration = Literal["unico", "multiplo"]
 DatasetMode = Literal["amostra_local", "hub"]
 EmbedBackend = Literal["hash", "sentence_transformers"]
@@ -22,10 +24,10 @@ BaselineProfile = Literal["nenhum", "so_embeddings", "so_juiz", "hibrido"]
 LexicalReferenceMode = Literal["primeiro", "mais_longo", "max_rouge_l"]
 ReferenceType = Literal["none", "lexical", "answer_lists"]
 #: `rag_pt` assume narrativa em português (FairytaleQA); `generic` é agnóstico
-#: ao corpus e em inglês. Antes existia só um estilo e o parâmetro era ignorado
-#: em `generate_answer` — correr outro corpus dizia ao gerador que respondia
-#: sobre contos infantis.
-PromptStyle = Literal["rag_pt", "generic"]
+#: ao corpus e em inglês; `generic_pt` é agnóstico ao corpus e em português.
+#: Antes existia só um estilo e o parâmetro era ignorado em `generate_answer` —
+#: correr outro corpus dizia ao gerador que respondia sobre contos infantis.
+PromptStyle = Literal["rag_pt", "generic", "generic_pt"]
 
 
 @dataclass
@@ -245,6 +247,8 @@ def _norm_reference_type(s: str) -> str:
 
 def _norm_prompt_style(s: str) -> str:
     low = s.strip().lower()
+    if low in ("generic_pt", "generico_pt", "agnostico_pt", "pt_generic", "neutro_pt"):
+        return "generic_pt"
     if low in ("generic", "generico", "agnostico", "en"):
         return "generic"
     if low in ("rag_pt", "pt_rag", "rag"):
@@ -254,6 +258,8 @@ def _norm_prompt_style(s: str) -> str:
 
 def _norm_judge_prompt_style(s: str) -> str:
     low = s.strip().lower()
+    if low in ("generic_pt", "generico_pt", "agnostico_pt", "pt_generic", "neutro_pt"):
+        return "generic_pt"
     if low in ("generic", "generico", "agnostico", "en"):
         return "generic"
     # `rag_en` mapeava para `rag_pt`, que é um prompt português sobre narrativa:
@@ -284,7 +290,7 @@ def _apply_reference_defaults(
     j_style = _expect_literal(
         "verification.judge_prompt_style",
         _norm_judge_prompt_style(j_style_raw),
-        ("pt", "rag_pt", "generic"),
+        ("pt", "rag_pt", "generic", "generic_pt"),
     )
 
     j_cot = bool(
@@ -477,7 +483,7 @@ def load_config(path: Path) -> AppConfig:
         _expect_literal(
             "generation.prompt_style",
             _norm_prompt_style(str(gn.get("prompt_style", gn.get("estilo_prompt", "rag_pt")))),
-            ("rag_pt", "generic"),
+            ("rag_pt", "generic", "generic_pt"),
         ),
     )
     aggregation_policy = cast(

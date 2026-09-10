@@ -24,7 +24,7 @@ Avaliar a **aderência da resposta ao contexto recuperado** com veredito estrutu
 | Chave | Tipo | Default | Efeito |
 |-------|------|---------|--------|
 | `verification.verify_judge` | bool | por adaptador | Activa camada juiz |
-| `verification.judge_prompt_style` | `pt` \| `rag_pt` \| `generic` | `pt` / `rag_pt` em RAG | Ficheiros em `src/llm_evaluation/prompts/judge_*.txt` |
+| `verification.judge_prompt_style` | `pt` \| `rag_pt` \| `generic` \| `generic_pt` | `pt` / `rag_pt` em RAG | Ficheiros em `src/llm_evaluation/prompts/judge_*.txt` |
 | `verification.negative_judge_verdicts` | list[str] | dataset | Vereditos que disparam `juiz_negativo` |
 | `verification.judge_return_chain_of_thought` | bool | **`false`** | Se `true`, persiste `cadeia_de_pensamento` no JSONL (debug) |
 | `verification.judge_max_context_chars` | int \| null | `12000` | Tecto de caracteres do contexto no prompt |
@@ -43,27 +43,45 @@ Sinónimos PT aceites: `devolver_cadeia_pensamento_juiz`, `max_chars_contexto_ju
 | `pt` | `judge_system.txt` | `judge_user_template.txt` |
 | `rag_pt` | `judge_rag_pt_system.txt` | `judge_rag_pt_user_template.txt` |
 | `generic` | `judge_generic_system.txt` | `judge_generic_user_template.txt` |
+| `generic_pt` | `judge_generic_pt_system.txt` | `judge_generic_pt_user_template.txt` |
 
 > Caminhos relativos a `src/llm_evaluation/prompts/`, que é a **fonte canónica**
 > (empacotada, com teste de integridade em `tests/test_prompt_parity.py`). O
 > `prompts/` da raiz é um espelho para edição local, ignorado pelo git.
-> O estilo `rag_en` foi removido; `generic` é o substituto agnóstico de domínio.
+> O estilo `rag_en` foi removido; `generic` (inglês) e `generic_pt` (português) são os
+> substitutos agnósticos de domínio.
 
-**Lacuna conhecida: não há prompt neutro de domínio em português.** Os estilos `pt` e
-`rag_pt` são portugueses mas específicos de narrativa — o `rag_pt` nomeia «contos,
-histórias infantis, fairytale» e o `responder_system.txt` diz «histórias e contos
-infantis». O `generic`, que é o único neutro quanto ao domínio, está escrito em inglês
-e declara explicitamente que nunca nomeia «a language of the source material». Na
-prática, hoje escolhe-se **português ou agnosticismo de domínio, nunca os dois**.
+**`generic_pt` — neutro quanto ao domínio **e** em português.** Antes deste estilo havia
+uma escolha forçada: `pt` e `rag_pt` são portugueses mas específicos de narrativa (o
+`rag_pt` nomeia «contos, histórias infantis, fairytale»), e `generic`, o único neutro, está
+em inglês e declara que nunca nomeia «a language of the source material». Correr outro
+corpus português obrigava portanto a dizer ao juiz que avaliava contos infantis, ou a
+fazê-lo raciocinar em inglês sobre texto português — uma variável escondida na camada cujo
+κ se publica.
 
-Correr outro corpus português exige portanto um de dois compromissos: `rag_pt`, que diz
-ao juiz que avalia contos infantis; ou `generic`, que faz o juiz raciocinar em inglês
-sobre texto português — uma variável escondida na camada cujo κ se publica.
+`generic_pt` acrescenta ao contrato comum sete endurecimentos, cada um com uma razão
+observada neste repositório:
 
-Um estilo `generic_pt` fecharia a lacuna, mas um prompt de juiz sem corrida gravada que
-o caracterize é um botão de YAML sem evidência, e a
-[`PREMISSAS.md`](../PREMISSAS.md) desaconselha exactamente isso. A precedência é:
-caracterizar primeiro (ECE, κ, viés), publicar depois.
+| Endurecimento | Porque existe |
+|---|---|
+| **Variedade ortográfica é regra dura** | `facto`/`fato`, `acção`/`ação`, `Dezembro`/`dezembro` são declaradas a mesma palavra e nunca contam como discrepância factual. O normalizador léxico ainda não cobre a divergência pt-PT/pt-BR; o juiz não pode acrescentar-lhe um segundo enviesamento. Dois exemplos negativos ensinam-no. |
+| **Precedência explícita de vereditos** | `inseguro` > `contradicacao` > `nao_sustentado` > `incompleto` > `sustentado`, e a primeira condição satisfeita decide. Sem isto, dois vereditos aplicáveis davam resultado instável entre chamadas. |
+| **Âncoras de confiança** | Tabela por faixa e a instrução de não usar ≥0,9 por omissão, citando a medição do próprio harness (confiança 0,91–0,98 com exatidão 0,56–0,61). Um prompt que não ancore a confiança reproduz a sobreconfiança que torna o campo inútil para triagem. |
+| **Enumeração de afirmações e suporte parcial** | Uma resposta com três afirmações exige três verificações, e uma afirmação concreta sem suporte basta para sair de `sustentado`. |
+| **Entradas patológicas** | Doze casos tabelados: contexto vazio, k=0, resposta vazia, resposta que copia o contexto, trechos duplicados, trechos em conflito entre si, contexto truncado, pergunta sem conteúdo factual. |
+| **Anti-injection alargado** | Além das ordens diretas: autoridade fingida («SISTEMA:»), falsificação de delimitador (um trecho que reproduz `=== FIM CONTEXTO ===`), JSON pré-preenchido no contexto, instruções escondidas em comentários, código, base64 ou noutra língua. Um trecho que *é* uma instrução continua a ser um trecho. |
+| **Contrato de saída endurecido** | Sem cercas de código, sem `null` em campo obrigatório, sem valores de enum inventados, e — em dúvida — ainda assim um veredito válido com confiança baixa. |
+
+Os identificadores de `flags_diagnostico` são partilhados com `generic` e verificados por
+teste: traduzi-los partiria um rótulo em dois na agregação.
+
+Estilo par para o gerador: `generation.estilo_prompt: generic_pt`
+(`responder_generic_pt_*`), com as mesmas propriedades e a mesma tabela de casos-limite.
+
+Contratos garantidos por `tests/test_prompt_generic_pt.py` (37 testes): ausência de termos
+de domínio, ortografia consistente fora das linhas que ensinam pares, fronteira
+anti-injection, precedência, âncoras de confiança, enum completo, taxonomia partilhada, e
+resolução do estilo nos três pontos de ligação.
 
 Placeholders: `{question}`, `{context}`, `{answer}`. Rubrica RAG EN (v1): grounding vs recusa honesta; resposta curta factual não deve ser `sustentado` se contradiz o contexto.
 

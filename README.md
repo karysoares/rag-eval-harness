@@ -157,6 +157,17 @@ Audit: `uv run python scripts/audit_run.py outputs --strict`
 
 Aggregation policies: `qualquer_critico`, `embedding_e_juiz`, `todos_criticos`. Reference types: `lexical`, `answer_lists`, `none` (key `dataset.reference_type`).
 
+**Prompt styles.** `verification.judge_prompt_style` and `generation.estilo_prompt` take four and three values respectively. Two axes matter: language, and whether the prompt names a domain.
+
+| Style | Language | Domain | Use it when |
+|---|---|---|---|
+| `rag_pt` | Portuguese | narrative (names tales) | The bundled FairytaleQA reference case |
+| `pt` | Portuguese | narrative | Legacy non-RAG rubric |
+| `generic` | English | neutral | A non-Portuguese corpus of any subject |
+| `generic_pt` | Portuguese | neutral | **A Portuguese corpus that is not narrative** |
+
+`generic_pt` exists because the other three forced a choice: tell the judge it is grading children's tales, or have it reason in English about Portuguese text — a hidden variable in the layer whose κ this README publishes. It is the hardest of the four: explicit verdict precedence, confidence anchors calibrated against the overconfidence measured above, twelve pathological-input cases, extended anti-injection (spoofed delimiters, fake `SISTEMA:` headers, pre-filled JSON), and a hard rule that pt-PT/pt-BR orthographic variants (`facto`/`fato`, `acção`/`ação`) are the same word and never a factual discrepancy. See [`docs/specs/003-judge.md`](docs/specs/003-judge.md).
+
 **Lexical metrics and language.** `metricas_lexicas.idioma` selects the normalisation: `pt` (default, the reference case) or `en`, which reproduces the official SQuAD protocol byte for byte so published English results stay comparable. The ROUGE tokenizer is Unicode-aware — the library's default splits every accented word — and normalisation separates on hyphens rather than gluing enclisis (`deu-lhe` → `deu lhe`).
 
 **METEOR is off by default, deliberately.** It needs the NLTK `wordnet` corpus, which `uv sync` does not install, and without it METEOR only scores near-identical pairs. Its mean was therefore computed over the easiest 2% of items and published beside the full N. Enabling it now requires the corpus (`python -m nltk.downloader wordnet omw-1.4`); `validate_protocol` refuses `meteor: true` without it, before the first paid call. Every mean in `sumario_lexical` also carries its own denominator in `n_por_metrica`, because different metrics fail on different items.

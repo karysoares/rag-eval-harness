@@ -10,12 +10,16 @@ from llm_evaluation.prompt_resources import source_prompts_dir
 CANONICAL_PROMPTS = frozenset(
     {
         "critic_system.txt",
+        "judge_generic_pt_system.txt",
+        "judge_generic_pt_user_template.txt",
         "judge_generic_system.txt",
         "judge_generic_user_template.txt",
         "judge_rag_pt_system.txt",
         "judge_rag_pt_user_template.txt",
         "judge_system.txt",
         "judge_user_template.txt",
+        "responder_generic_pt_system.txt",
+        "responder_generic_pt_user_template.txt",
         "responder_generic_system.txt",
         "responder_generic_user_template.txt",
         "responder_system.txt",

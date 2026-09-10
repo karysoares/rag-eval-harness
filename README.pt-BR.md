@@ -155,6 +155,17 @@ Auditoria: `uv run python scripts/audit_run.py outputs --strict`
 
 Políticas de agregação: `qualquer_critico`, `embedding_e_juiz`, `todos_criticos`. Tipos de referência: `lexical`, `answer_lists`, `none` (chave `dataset.reference_type`).
 
+**Estilos de prompt.** `verification.judge_prompt_style` e `generation.estilo_prompt` aceitam quatro e três valores. Dois eixos importam: a língua, e se o prompt nomeia um domínio.
+
+| Estilo | Língua | Domínio | Usar quando |
+|---|---|---|---|
+| `rag_pt` | português | narrativa (nomeia contos) | O caso de referência FairytaleQA incluído |
+| `pt` | português | narrativa | Rubrica legada, sem RAG |
+| `generic` | inglês | neutro | Um corpus não português, de qualquer área |
+| `generic_pt` | português | neutro | **Um corpus português que não seja narrativa** |
+
+O `generic_pt` existe porque os outros três impunham uma escolha: dizer ao juiz que avalia contos infantis, ou fazê-lo raciocinar em inglês sobre texto português — uma variável escondida na camada cujo κ este README publica. É o mais endurecido dos quatro: precedência explícita de vereditos, âncoras de confiança calibradas contra a sobreconfiança medida acima, doze casos de entrada patológica, anti-injection alargado (delimitadores falsificados, cabeçalhos `SISTEMA:` fingidos, JSON pré-preenchido), e a regra dura de que variantes ortográficas pt-PT/pt-BR (`facto`/`fato`, `acção`/`ação`) são a mesma palavra e nunca uma discrepância factual. Ver [`docs/specs/003-judge.md`](docs/specs/003-judge.md).
+
 **Métricas léxicas e língua.** `metricas_lexicas.idioma` escolhe a normalização: `pt` (por omissão, o caso de referência) ou `en`, que reproduz o protocolo oficial do SQuAD byte a byte para que resultados ingleses publicados continuem comparáveis. O tokenizador do ROUGE é Unicode — o da biblioteca parte toda a palavra acentuada — e a normalização separa nos hífenes em vez de colar a ênclise (`deu-lhe` → `deu lhe`).
 
 **O METEOR vem desligado, de propósito.** Precisa do corpus `wordnet` do NLTK, que o `uv sync` não instala, e sem ele só pontua pares quase idênticos. A sua média era por isso calculada sobre os 2% de itens mais fáceis e publicada ao lado do N completo. Ligá-lo exige agora o recurso (`python -m nltk.downloader wordnet omw-1.4`); `validate_protocol` recusa `meteor: true` sem ele, antes da primeira chamada paga. Cada média em `sumario_lexical` leva também o seu próprio denominador em `n_por_metrica`, porque métricas diferentes falham em itens diferentes.

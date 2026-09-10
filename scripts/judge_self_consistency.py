@@ -119,7 +119,7 @@ def main() -> None:
     parser.add_argument("--timeout", type=float, default=90.0, help="Timeout por chamada")
     parser.add_argument(
         "--prompt-style",
-        choices=["pt", "rag_pt"],
+        choices=["pt", "rag_pt", "generic", "generic_pt"],
         default=None,
         help=(
             "Força o estilo de prompt do juiz. Por omissão usa o da corrida "

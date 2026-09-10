@@ -37,8 +37,11 @@ def _prompt_files(style: PromptStyle) -> tuple[str, str]:
 
     `generic` não nomeia domínio nem língua da fonte: é o que permite correr o
     mesmo pipeline sobre outro corpus sem dizer ao gerador que responde sobre
-    contos infantis.
+    contos infantis. `generic_pt` faz o mesmo em português, para que um corpus
+    português não obrigue a escolher entre a língua e a neutralidade de domínio.
     """
+    if style == "generic_pt":
+        return "responder_generic_pt_system.txt", "responder_generic_pt_user_template.txt"
     if style == "generic":
         return "responder_generic_system.txt", "responder_generic_user_template.txt"
     return "responder_system.txt", "responder_user_template.txt"
