@@ -121,12 +121,20 @@ class TestFileLock:
     def test_sequential_holders(self, tmp_path: Path) -> None:
         lock = tmp_path / "x.lock"
         order: list[str] = []
+        # Uma excepção numa thread não chega ao teste: sem a recolher, um timeout
+        # do lock sob carga aparecia como IndexError na asserção final, a apontar
+        # para o sítio errado. O timeout é generoso porque a máquina pode estar a
+        # correr outra coisa — o que se mede é exclusão mútua, não latência.
+        erros: list[BaseException] = []
 
         def worker(tag: str) -> None:
-            with file_lock(lock, timeout_seconds=5.0, poll_seconds=0.01):
-                order.append(f"{tag}-in")
-                time.sleep(0.05)
-                order.append(f"{tag}-out")
+            try:
+                with file_lock(lock, timeout_seconds=30.0, poll_seconds=0.01):
+                    order.append(f"{tag}-in")
+                    time.sleep(0.05)
+                    order.append(f"{tag}-out")
+            except BaseException as exc:  # noqa: BLE001 — recolher para reportar
+                erros.append(exc)
 
         t1 = threading.Thread(target=worker, args=("a",))
         t2 = threading.Thread(target=worker, args=("b",))
@@ -134,6 +142,8 @@ class TestFileLock:
         t2.start()
         t1.join()
         t2.join()
+        assert not erros, f"worker falhou: {erros!r}"
+        assert len(order) == 4, f"esperadas 4 transições, obtidas {order!r}"
         # Secções críticas nunca se sobrepõem: cada "-in" é seguido do próprio "-out".
         assert order[0].split("-")[0] == order[1].split("-")[0]
         assert order[2].split("-")[0] == order[3].split("-")[0]
