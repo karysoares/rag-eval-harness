@@ -1,0 +1,117 @@
+{
+  "titulo": "Ablação de recuperação sobre o HotpotQA (SPEC-013)",
+  "data_utc": "2026-09-04",
+  "origem": "outputs/ablacao/ — corrida gravada, não estimativa",
+  "conjunto": {
+    "conjunto": "mteb/hotpotqa+hotpotqa/hotpot_qa",
+    "n_passagens_indexadas": 150199,
+    "n_passagens_no_corpus_original": 5233329,
+    "corpus_subamostrado": true,
+    "n_queries": 100,
+    "n_julgamentos": 200,
+    "relevantes_por_query": 2.0,
+    "semente_amostragem": 42,
+    "comparavel_com_beir": false,
+    "nota": "Índice subamostrado de propósito: mede o efeito da recuperação na geração, não posiciona o recuperador contra a literatura.",
+    "n_queries_com_qrels": 7405,
+    "n_queries_com_resposta": 7405,
+    "n_queries_com_ambos": 7405
+  },
+  "parametros": {
+    "top_k": 4,
+    "desvios": [
+      0,
+      2,
+      50
+    ],
+    "seed": 42,
+    "n_distratores_corpus": 150000
+  },
+  "modelos": {
+    "gerador": "gpt-4o-mini",
+    "juiz": "gpt-4o",
+    "prompts": "generic"
+  },
+  "bracos": {
+    "desvio_0": {
+      "cobertura_ranking": 0.96,
+      "contexto_com_relevante": 0.96,
+      "respondeu": 0.83,
+      "respondeu_e_sustentado": 0.69,
+      "recusou": 0.17,
+      "alucinou": 0.09
+    },
+    "desvio_2": {
+      "cobertura_ranking": 0.16,
+      "contexto_com_relevante": 0.16,
+      "respondeu": 0.18,
+      "respondeu_e_sustentado": 0.08,
+      "recusou": 0.82,
+      "alucinou": 0.07
+    },
+    "desvio_50": {
+      "cobertura_ranking": 0.01,
+      "contexto_com_relevante": 0.01,
+      "respondeu": 0.03,
+      "respondeu_e_sustentado": 0.0,
+      "recusou": 0.97,
+      "alucinou": 0.02
+    }
+  },
+  "comparacoes_respondeu_e_sustentado": [
+    {
+      "par": [
+        "desvio_0",
+        "desvio_2"
+      ],
+      "dif": 0.61,
+      "ic95": [
+        0.51,
+        0.71
+      ],
+      "p_mcnemar": 1.564e-14
+    },
+    {
+      "par": [
+        "desvio_0",
+        "desvio_50"
+      ],
+      "dif": 0.69,
+      "ic95": [
+        0.6,
+        0.78
+      ],
+      "p_mcnemar": 2.695e-16
+    },
+    {
+      "par": [
+        "desvio_2",
+        "desvio_50"
+      ],
+      "dif": 0.08,
+      "ic95": [
+        0.03,
+        0.14
+      ],
+      "p_mcnemar": 0.007812
+    }
+  ],
+  "kpi_ingenuo_aponta_ao_contrario": {
+    "taxa_aprovada_pelo_juiz": {
+      "desvio_0": 0.91,
+      "desvio_2": 0.93,
+      "desvio_50": 0.98
+    },
+    "explicacao": "A árvore de decisão do juiz classifica recusa honesta com contexto insuficiente como `sustentado`, e está correcta. Usar essa taxa como KPI de produto mistura «respondeu bem» com «recusou bem»: um sistema que não recupera nada recusa sempre e pontua 0,98."
+  },
+  "nao_publicavel": {
+    "exact_match": 0.0,
+    "f1_token_melhor_braco": 0.225,
+    "motivo": "Artefacto de configuração, não resultado: as respostas do HotpotQA são spans de 1–5 palavras e o prompt `generic` pede uma frase curta. A sobreposição é estruturalmente baixa e a igualdade exacta impossível."
+  },
+  "limitacoes": [
+    "Índice subamostrado (150 199 de 5 233 329 passagens): não comparável com o BEIR.",
+    "100 queries, um só gerador e um só juiz; sem estratificação por tipo de pergunta.",
+    "Uma corrida anterior foi anulada por fuga do chunk ouro para o braço degradado; os seus números não constam deste ficheiro."
+  ]
+}

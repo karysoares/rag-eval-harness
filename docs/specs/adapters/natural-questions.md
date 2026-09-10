@@ -1,7 +1,9 @@
 # SPEC-A-NQ: Adaptador Natural Questions
 
 - **Estado:** implemented (dois protocolos YAML)
-- **Testes:** `tests/test_eval_items_load.py`, `tests/test_adapters_natural_questions.py`
+- **Testes:** `tests/test_eval_items_load.py` (o adaptador dedicado foi substituído
+  pelo genérico `adapters/hf_generic.py`; `tests/test_adapters_natural_questions.py`
+  não é distribuído, pela mesma razão que os configs `nq_open*.yaml`)
 
 ## Objetivo
 

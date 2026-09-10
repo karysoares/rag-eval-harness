@@ -24,7 +24,7 @@ Avaliar a **aderência da resposta ao contexto recuperado** com veredito estrutu
 | Chave | Tipo | Default | Efeito |
 |-------|------|---------|--------|
 | `verification.verify_judge` | bool | por adaptador | Activa camada juiz |
-| `verification.judge_prompt_style` | `pt` \| `rag_en` \| `rag_pt` | `pt` / `rag_pt` em RAG | Ficheiros em `prompts/judge_*.txt` |
+| `verification.judge_prompt_style` | `pt` \| `rag_pt` \| `generic` | `pt` / `rag_pt` em RAG | Ficheiros em `src/llm_evaluation/prompts/judge_*.txt` |
 | `verification.negative_judge_verdicts` | list[str] | dataset | Vereditos que disparam `juiz_negativo` |
 | `verification.judge_return_chain_of_thought` | bool | **`false`** | Se `true`, persiste `cadeia_de_pensamento` no JSONL (debug) |
 | `verification.judge_max_context_chars` | int \| null | `12000` | Tecto de caracteres do contexto no prompt |
@@ -40,9 +40,14 @@ Sinónimos PT aceites: `devolver_cadeia_pensamento_juiz`, `max_chars_contexto_ju
 
 | Estilo | System | User template |
 |--------|--------|----------------|
-| `pt` | `prompts/judge_system.txt` | `prompts/judge_user_template.txt` |
-| `rag_en` | `prompts/judge_rag_en_system.txt` | `prompts/judge_rag_en_user_template.txt` |
-| `rag_pt` | `prompts/judge_rag_pt_system.txt` | `prompts/judge_rag_pt_user_template.txt` |
+| `pt` | `judge_system.txt` | `judge_user_template.txt` |
+| `rag_pt` | `judge_rag_pt_system.txt` | `judge_rag_pt_user_template.txt` |
+| `generic` | `judge_generic_system.txt` | `judge_generic_user_template.txt` |
+
+> Caminhos relativos a `src/llm_evaluation/prompts/`, que é a **fonte canónica**
+> (empacotada, com teste de integridade em `tests/test_prompt_parity.py`). O
+> `prompts/` da raiz é um espelho para edição local, ignorado pelo git.
+> O estilo `rag_en` foi removido; `generic` é o substituto agnóstico de domínio.
 
 Placeholders: `{question}`, `{context}`, `{answer}`. Rubrica RAG EN (v1): grounding vs recusa honesta; resposta curta factual não deve ser `sustentado` se contradiz o contexto.
 

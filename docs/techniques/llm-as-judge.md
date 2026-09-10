@@ -15,7 +15,7 @@ Rubrica fixa + saída JSON estruturada reduz ambiguidade; ainda assim o juiz pod
 
 ## 4. Algoritmo
 
-Chamada OpenAI-compatible com `prompts/judge_system.txt` e template de utilizador.
+Chamada OpenAI-compatible com `src/llm_evaluation/prompts/judge_system.txt` e template de utilizador.
 
 ## 5. Hiperparâmetros
 

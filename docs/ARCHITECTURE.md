@@ -96,7 +96,7 @@ Regras fixas em `pattern_detection.py` → `meta.diagnostico` (tags, `padrao_pri
 | **Sinais** | `juiz.veredito`, `juiz_negativo` |
 | **Regra** | Rubrica distinta da de grounding — evitar duplicar o mesmo critério nos dois prompts |
 
-**Módulos:** `verification/judge.py`, `prompts/judge_*.txt`.
+**Módulos:** `verification/judge.py`, `src/llm_evaluation/prompts/judge_*.txt`.
 
 ### Reference (opcional)
 

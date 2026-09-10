@@ -1,0 +1,351 @@
+{
+ "schema_version": "1",
+ "gerado_em_utc": "2026-09-02T22:44:34.212263+00:00",
+ "titulo": "A/B de juízes LLM sobre FairytaleQA pt-BR",
+ "config": "configs/ptbr_fairytale_judge_ab.yaml",
+ "desenho": {
+  "n_itens": 200,
+  "shuffle": false,
+  "gerador": "varia entre braços — ver o campo 'gerador' de cada braço. Só os três braços de API partilham gpt-4o-mini; o braço local gerou com llama3.2.",
+  "referencia": "lexical (F1 token vs resposta ouro)",
+  "nota_referencia": "A referência mede sobreposição léxica; o juiz mede aderência ao contexto recuperado. São planos métricos distintos — kappa baixo indica independência entre sinais, não incompetência do juiz.",
+  "gate_juiz": "desligado (null) para que todos os braços julguem os mesmos itens",
+  "comparacao_limpa": "gpt-4o vs gpt-4o-mini vs gpt-5.4-nano: mesmo gerador, mesmos itens, só o juiz varia. O braço local não entra nesta comparação."
+ },
+ "bracos": [
+  {
+   "juiz": "gpt-4o",
+   "gerador": "gpt-4o-mini",
+   "juiz_igual_ao_gerador": false,
+   "confundido": false,
+   "run_id": "run_20260902T200922Z",
+   "n_itens_com_veredito_real": 189,
+   "n_falhas_execucao": 9,
+   "exatidao_vs_referencia_lexical": 0.5608,
+   "ic95_exatidao": [
+    0.4896,
+    0.6297
+   ],
+   "cohen_kappa": -0.0276,
+   "ece": 0.4209,
+   "confianca_media": 0.9817,
+   "taxa_sustentado": 0.8624,
+   "distribuicao_vereditos": {
+    "contradicacao": 4,
+    "incompleto": 21,
+    "nao_sustentado": 1,
+    "sustentado": 163
+   },
+   "latencia_media_item_s": 11.66,
+   "uso_por_modelo": {
+    "gpt-4o-mini": {
+     "chamadas": 191,
+     "tokens_prompt": 481455,
+     "tokens_completion": 8218
+    },
+    "gpt-4o": {
+     "chamadas": 189,
+     "tokens_prompt": 571437,
+     "tokens_completion": 18143
+    }
+   },
+   "custo_usd_modelos_com_preco_conhecido": {
+    "gpt-4o-mini": 0.0771,
+    "gpt-4o": 1.61
+   }
+  },
+  {
+   "juiz": "gpt-4o-mini",
+   "gerador": "gpt-4o-mini",
+   "juiz_igual_ao_gerador": true,
+   "aviso": "Auto-avaliação: o juiz é o modelo que gerou a resposta. Um modelo a corrigir o seu próprio trabalho tende a preferi-lo, pelo que este braço não é comparável com os restantes sem essa ressalva.",
+   "confundido": false,
+   "run_id": "run_20260902T211159Z",
+   "n_itens_com_veredito_real": 200,
+   "n_falhas_execucao": 0,
+   "exatidao_vs_referencia_lexical": 0.575,
+   "ic95_exatidao": [
+    0.5057,
+    0.6415
+   ],
+   "cohen_kappa": -0.0062,
+   "ece": 0.3985,
+   "confianca_media": 0.9735,
+   "taxa_sustentado": 0.78,
+   "distribuicao_vereditos": {
+    "contradicacao": 3,
+    "incompleto": 41,
+    "sustentado": 156
+   },
+   "latencia_media_item_s": 2.98,
+   "uso_por_modelo": {
+    "gpt-4o-mini": {
+     "chamadas": 400,
+     "tokens_prompt": 1108713,
+     "tokens_completion": 24742
+    }
+   },
+   "custo_usd_modelos_com_preco_conhecido": {
+    "gpt-4o-mini": 0.1812
+   }
+  },
+  {
+   "juiz": "gpt-5.4-nano",
+   "gerador": "gpt-4o-mini",
+   "juiz_igual_ao_gerador": false,
+   "confundido": false,
+   "run_id": "run_20260902T223513Z",
+   "n_itens_com_veredito_real": 200,
+   "n_falhas_execucao": 0,
+   "exatidao_vs_referencia_lexical": 0.61,
+   "ic95_exatidao": [
+    0.5409,
+    0.6749
+   ],
+   "cohen_kappa": 0.0919,
+   "ece": 0.2959,
+   "confianca_media": 0.9058,
+   "taxa_sustentado": 0.765,
+   "distribuicao_vereditos": {
+    "contradicacao": 5,
+    "incompleto": 30,
+    "nao_sustentado": 12,
+    "sustentado": 153
+   },
+   "latencia_media_item_s": 2.55,
+   "uso_por_modelo": {
+    "gpt-4o-mini": {
+     "chamadas": 200,
+     "tokens_prompt": 504179,
+     "tokens_completion": 8585
+    },
+    "gpt-5.4-nano": {
+     "chamadas": 200,
+     "tokens_prompt": 604314,
+     "tokens_completion": 23572
+    }
+   },
+   "custo_usd_modelos_com_preco_conhecido": {
+    "gpt-4o-mini": 0.0808
+   }
+  },
+  {
+   "juiz": "qwen2.5:latest (Ollama)",
+   "gerador": "llama3.2:latest (Ollama)",
+   "juiz_igual_ao_gerador": false,
+   "confundido": true,
+   "aviso": "Braço confundido: varia juiz E gerador face aos outros três. Um kappa mais alto é igualmente compatível com um juiz mais discriminativo e com um gerador mais fraco a produzir respostas piores. Os dados não separam as duas hipóteses.",
+   "run_id": "run_20260902T200556Z",
+   "n_itens_com_veredito_real": 200,
+   "n_falhas_execucao": 0,
+   "exatidao_vs_referencia_lexical": 0.585,
+   "ic95_exatidao": [
+    0.5157,
+    0.6511
+   ],
+   "cohen_kappa": 0.1899,
+   "ece": 0.3665,
+   "confianca_media": 0.9115,
+   "taxa_sustentado": 0.595,
+   "distribuicao_vereditos": {
+    "incompleto": 22,
+    "nao_sustentado": 59,
+    "sustentado": 119
+   },
+   "latencia_media_item_s": 33.74,
+   "uso_por_modelo": {
+    "llama3.2:latest": {
+     "chamadas": 243,
+     "tokens_prompt": 691776,
+     "tokens_completion": 16341
+    },
+    "qwen2.5:latest": {
+     "chamadas": 200,
+     "tokens_prompt": 678445,
+     "tokens_completion": 15482
+    }
+   },
+   "custo_usd_modelos_com_preco_conhecido": {}
+  }
+ ],
+ "significancia_emparelhada": [
+  {
+   "par": [
+    "run_20260902T200922Z",
+    "run_20260902T211159Z"
+   ],
+   "metrica": "taxa_alerta",
+   "n_itens_comuns": 191,
+   "cobertura_a": 0.955,
+   "cobertura_b": 0.955,
+   "so_a": 0,
+   "so_b": 0,
+   "mcnemar": null,
+   "bootstrap_emparelhado": {
+    "diferenca_observada": 0.0,
+    "ic_inferior": 0.0,
+    "ic_superior": 0.0,
+    "confianca": 0.95,
+    "n_pares": 191,
+    "n_reamostragens": 2000
+   },
+   "excluidos_por_erro": {
+    "a": 9,
+    "b": 0
+   },
+   "aviso_exclusao_assimetrica": "run_20260902T200922Z perdeu 9 item(ns) por erro de execução e run_20260902T211159Z perdeu 0. A comparação usa só os itens que ambas avaliaram; verifique se a assimetria indica um problema de infraestrutura."
+  },
+  {
+   "par": [
+    "run_20260902T200922Z",
+    "run_20260902T223513Z"
+   ],
+   "metrica": "taxa_alerta",
+   "n_itens_comuns": 191,
+   "cobertura_a": 0.955,
+   "cobertura_b": 0.955,
+   "so_a": 0,
+   "so_b": 1,
+   "mcnemar": {
+    "metodo": "mcnemar_exato_binomial",
+    "n_discordantes": 1,
+    "b": 0,
+    "c": 1,
+    "p_valor": 1.0
+   },
+   "bootstrap_emparelhado": {
+    "diferenca_observada": -0.005235602094240838,
+    "ic_inferior": -0.015706806282722512,
+    "ic_superior": 0.0,
+    "confianca": 0.95,
+    "n_pares": 191,
+    "n_reamostragens": 2000
+   },
+   "excluidos_por_erro": {
+    "a": 9,
+    "b": 0
+   },
+   "aviso_exclusao_assimetrica": "run_20260902T200922Z perdeu 9 item(ns) por erro de execução e run_20260902T223513Z perdeu 0. A comparação usa só os itens que ambas avaliaram; verifique se a assimetria indica um problema de infraestrutura.",
+   "significativo_95": false
+  },
+  {
+   "par": [
+    "run_20260902T200922Z",
+    "run_20260902T200556Z"
+   ],
+   "metrica": "taxa_alerta",
+   "n_itens_comuns": 191,
+   "cobertura_a": 0.955,
+   "cobertura_b": 0.955,
+   "so_a": 0,
+   "so_b": 0,
+   "mcnemar": null,
+   "bootstrap_emparelhado": {
+    "diferenca_observada": 0.0,
+    "ic_inferior": 0.0,
+    "ic_superior": 0.0,
+    "confianca": 0.95,
+    "n_pares": 191,
+    "n_reamostragens": 2000
+   },
+   "excluidos_por_erro": {
+    "a": 9,
+    "b": 0
+   },
+   "aviso_exclusao_assimetrica": "run_20260902T200922Z perdeu 9 item(ns) por erro de execução e run_20260902T200556Z perdeu 0. A comparação usa só os itens que ambas avaliaram; verifique se a assimetria indica um problema de infraestrutura."
+  },
+  {
+   "par": [
+    "run_20260902T211159Z",
+    "run_20260902T223513Z"
+   ],
+   "metrica": "taxa_alerta",
+   "n_itens_comuns": 200,
+   "cobertura_a": 1.0,
+   "cobertura_b": 1.0,
+   "so_a": 0,
+   "so_b": 1,
+   "mcnemar": {
+    "metodo": "mcnemar_exato_binomial",
+    "n_discordantes": 1,
+    "b": 0,
+    "c": 1,
+    "p_valor": 1.0
+   },
+   "bootstrap_emparelhado": {
+    "diferenca_observada": -0.005,
+    "ic_inferior": -0.015,
+    "ic_superior": 0.0,
+    "confianca": 0.95,
+    "n_pares": 200,
+    "n_reamostragens": 2000
+   },
+   "significativo_95": false
+  },
+  {
+   "par": [
+    "run_20260902T211159Z",
+    "run_20260902T200556Z"
+   ],
+   "metrica": "taxa_alerta",
+   "n_itens_comuns": 200,
+   "cobertura_a": 1.0,
+   "cobertura_b": 1.0,
+   "so_a": 0,
+   "so_b": 0,
+   "mcnemar": null,
+   "bootstrap_emparelhado": {
+    "diferenca_observada": 0.0,
+    "ic_inferior": 0.0,
+    "ic_superior": 0.0,
+    "confianca": 0.95,
+    "n_pares": 200,
+    "n_reamostragens": 2000
+   }
+  },
+  {
+   "par": [
+    "run_20260902T223513Z",
+    "run_20260902T200556Z"
+   ],
+   "metrica": "taxa_alerta",
+   "n_itens_comuns": 200,
+   "cobertura_a": 1.0,
+   "cobertura_b": 1.0,
+   "so_a": 1,
+   "so_b": 0,
+   "mcnemar": {
+    "metodo": "mcnemar_exato_binomial",
+    "n_discordantes": 1,
+    "b": 1,
+    "c": 0,
+    "p_valor": 1.0
+   },
+   "bootstrap_emparelhado": {
+    "diferenca_observada": 0.005,
+    "ic_inferior": 0.0,
+    "ic_superior": 0.015,
+    "confianca": 0.95,
+    "n_pares": 200,
+    "n_reamostragens": 2000
+   },
+   "significativo_95": false
+  }
+ ],
+ "conclusoes": [
+  "Nenhum par difere significativamente na taxa de alerta após excluir falhas de execução (todos p=1).",
+  "Os 9 itens falhados do braço gpt-4o são erros de quota da API, não desacordo de juízes; sem os excluir, o McNemar dava p=0.004 — um efeito inteiramente artefactual.",
+  "gpt-5.4-nano tem a melhor exatidão (0.610) e a melhor calibração (ECE 0.296) e é o mais rápido.",
+  "O braço local (qwen2.5) tem o kappa mais alto (0.190) e a menor taxa de aprovação (59.5%), a custo zero e 13x mais lento — mas gerou com llama3.2, logo varia juiz e gerador ao mesmo tempo. A leitura 'o juiz local discrimina melhor' NÃO é sustentada por estes dados; fica pendente de re-correr o braço com o gerador partilhado.",
+  "Todos os juízes são sobreconfiantes: confianca media 0.91-0.98 com exatidao 0.56-0.61.",
+  "O braço gpt-4o-mini é auto-avaliação (juiz = gerador). A sua taxa de aprovação não é comparável de forma limpa com os braços cujo juiz vem de outra família."
+ ],
+ "limitacoes": [
+  "Braço local confundido: gerou com llama3.2 enquanto os três braços de API partilham gpt-4o-mini. Viola a regra de uma variável de cada vez; a comparação limpa é apenas entre os três braços de API.",
+  "Braço gpt-4o-mini é auto-referente: JUDGE_MODEL igual a LLM_MODEL (protocolo_ativo.judge_same_as_generator=true em run_20260902T211159Z).",
+  "N=200 de um corpus de 1025; nao extrapolar.",
+  "Precos de gpt-5.4-nano nao confirmados — o custo desse braco fica por preencher.",
+  "Sem adjudicacao humana: a referencia e automatica (F1 token), logo a exatidao e o kappa medem concordancia com um sinal lexical, nao com um humano.",
+  "As metricas lexicas destas corridas precedem a normalizacao portuguesa (tokenizador Unicode no ROUGE); ver o bloco reanalise quando reprocessadas."
+ ]
+}

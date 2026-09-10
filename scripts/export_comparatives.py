@@ -32,7 +32,6 @@ INTERNO_EVOLUTION_CORRIDAS: list[dict[str, Any]] = [
         "run_id": "run_20260517T190713Z",
         "config": "configs/ptbr_fairytale_full.yaml",
         "metricas": {
-            "media_meteor": 0.783,
             "media_rouge_l_f": 0.380,
             "media_bleu": 0.206,
             "taxa_juiz_sustentado_diagnostico": 0.796,
@@ -44,7 +43,6 @@ INTERNO_EVOLUTION_CORRIDAS: list[dict[str, Any]] = [
         "run_id": "run_20260517T215023Z",
         "config": "configs/ptbr_fairytale_full.yaml",
         "metricas": {
-            "media_meteor": 0.823,
             "media_rouge_l_f": 0.366,
             "media_bleu": 0.193,
             "taxa_juiz_sustentado_diagnostico": 0.954,
@@ -56,7 +54,6 @@ INTERNO_EVOLUTION_CORRIDAS: list[dict[str, Any]] = [
         "run_id": "run_20260518T074031Z",
         "config": "configs/ptbr_fairytale_full.yaml",
         "metricas": {
-            "media_meteor": 0.826,
             "media_rouge_l_f": 0.367,
             "media_bleu": 0.191,
             "taxa_juiz_sustentado_diagnostico": 0.915,
@@ -68,7 +65,6 @@ INTERNO_EVOLUTION_CORRIDAS: list[dict[str, Any]] = [
         "run_id": "run_20260606T121845Z",
         "config": "configs/ptbr_fairytale_tuned.yaml",
         "metricas": {
-            "media_meteor": 0.901,
             "media_rouge_l_f": 0.349,
             "media_bleu": 0.175,
             "taxa_juiz_sustentado_diagnostico": 0.780,
@@ -185,6 +181,25 @@ def _policy_comparative(run_dir: Path) -> dict[str, Any] | None:
     }
 
 
+def _proveniencia(run_id: str | None) -> dict[str, Any]:
+    """Diz se o artefacto que sustenta um número ainda existe no repositório.
+
+    Um comparativo cujo `run_id` já não tem `outputs/run_*/` não é reproduzível por
+    terceiros. Marcá-lo é mais honesto do que apagá-lo: o número foi medido, mas
+    deixou de ser verificável (invariante 5).
+    """
+    if not run_id:
+        return {"run_id": None, "artefactos_presentes": False, "motivo": "sem run_id"}
+    d = ROOT / "outputs" / run_id
+    if (d / "predictions.jsonl").is_file() and (d / "summary.json").is_file():
+        return {"run_id": run_id, "artefactos_presentes": True}
+    return {
+        "run_id": run_id,
+        "artefactos_presentes": False,
+        "motivo": f"outputs/{run_id} nao esta no repositorio; numero medido mas nao reverificavel",
+    }
+
+
 def _harness_lexical(summary: dict[str, Any]) -> dict[str, Any]:
     lex = summary.get("sumario_lexical") or {}
     ret = summary.get("sumario_recuperacao") or {}
@@ -195,9 +210,8 @@ def _harness_lexical(summary: dict[str, Any]) -> dict[str, Any]:
     juiz_sust = None
     if isinstance(n, int) and n and isinstance(n_juiz_diag, int):
         juiz_sust = 1.0 - (n_juiz_diag / n)
-    return {
+    out: dict[str, Any] = {
         "n_itens": n,
-        "media_meteor": lex.get("media_meteor"),
         "media_rouge_l_f": lex.get("media_rouge_l_f"),
         "media_bleu": lex.get("media_bleu"),
         "media_f1_token": lex.get("media_f1_token"),
@@ -205,6 +219,21 @@ def _harness_lexical(summary: dict[str, Any]) -> dict[str, Any]:
         "taxa_juiz_sustentado_diagnostico": juiz_sust,
         "taxa_alerta": summary.get("taxa_alerta"),
     }
+    # METEOR sem o corpus wordnet do NLTK só pontua pares quase idênticos, logo a média
+    # sai estruturalmente inflacionada. Publica-se com o denominador ou não se publica.
+    n_por_metrica = lex.get("n_por_metrica") or {}
+    n_met = n_por_metrica.get("meteor") if isinstance(n_por_metrica, dict) else None
+    n_pont = lex.get("n_itens_pontuados")
+    if isinstance(n_met, int) and isinstance(n_pont, int) and n_met == n_pont and n_met:
+        out["media_meteor"] = lex.get("media_meteor")
+        out["n_meteor"] = n_met
+    elif lex.get("media_meteor") is not None:
+        out["meteor_omitido"] = (
+            f"media calculada sobre {n_met} de {n_pont} itens; o subconjunto "
+            "sobrevivente e o mais facil, logo a media e enviesada para cima"
+        )
+    out["idioma_normalizacao"] = lex.get("idioma_normalizacao")
+    return out
 
 
 def _ragas_comparative(run_dir: Path, *, n: int) -> dict[str, Any] | None:
@@ -317,12 +346,21 @@ def main() -> None:
     comparativos: dict[str, Any] = {
         "interno_fairytale_evolution": {
             "eixo": "interno",
+            "tipo": "historico",
             "adaptador": "FairytaleQA-translated-ptBR (hub)",
             "split": "validation",
             "n_itens": 1025,
             "politica_agregacao": "embedding_e_juiz",
-            "corridas": INTERNO_EVOLUTION_CORRIDAS,
-            "nota": "Mesmo harness; variam YAML, calibração embedding e parâmetros RAG/geração.",
+            "corridas": [
+                {**c, "proveniencia": _proveniencia(c.get("run_id"))}
+                for c in INTERNO_EVOLUTION_CORRIDAS
+            ],
+            "nota": (
+                "Historico de configuracao, NAO uma comparacao: entre corridas variam o YAML, "
+                "a calibracao de embedding e os parametros de RAG/geracao ao mesmo tempo, pelo "
+                "que a diferenca nao e atribuivel a nenhum deles. METEOR foi retirado porque a "
+                "media dependia de um denominador que estes artefactos ja nao permitem apurar."
+            ),
         },
     }
 
@@ -337,6 +375,7 @@ def main() -> None:
             "config": "configs/ptbr_fairytale_tuned.yaml",
             "harness": _harness_lexical(s),
             "policy": tuned_policy,
+            "proveniencia": _proveniencia(tuned.name),
         }
         if args.ragas:
             ragas = _ragas_comparative(tuned, n=args.ragas_n)
@@ -363,13 +402,21 @@ def main() -> None:
     hitl_run = args.run_hitl.expanduser()
     hitl = _hitl_comparative(hitl_run)
     if hitl:
-        comparativos["hitl_amostra"] = {"eixo": "hitl", **hitl}
+        comparativos["hitl_amostra"] = {
+            "eixo": "hitl",
+            **hitl,
+            "proveniencia": _proveniencia(hitl_run.name),
+        }
         _write_hitl_fixture(hitl_run)
 
     out: dict[str, Any] = {
-        "schema_version": "1.1",
+        "schema_version": "1.2",
         "gerado_em_utc": datetime.now(tz=UTC).isoformat(),
-        "nota": "Comparativos versionados; regenerar com scripts/export_comparatives.py",
+        "nota": (
+            "Comparativos versionados; regenerar com scripts/export_comparatives.py. "
+            "Cada entrada carrega proveniencia.artefactos_presentes: false significa que o "
+            "numero foi medido mas a corrida que o sustenta ja nao esta no repositorio."
+        ),
         "eixos": EIXOS_META,
         "comparativos": comparativos,
     }

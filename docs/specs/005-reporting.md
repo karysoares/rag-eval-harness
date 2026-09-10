@@ -174,8 +174,12 @@ Legenda: **Impl.** = implementado; **Parc.** = parcial no código actual; **Plan
 |---|------|----------|----------------|-------------------|--------|-------|
 | 22 | Matriz discrepância | Juiz vs gold vs embedding | `disagreement.json` por item | Tab Discrepância | **Plan.** | SPEC-003, 004 |
 | 23 | Drift entre runs | Mesmo config, resultados diferentes | Diff metadados + hash prompts + Δ KPI | Alerta drift | **Parc.** (hashes Fase 1) | #2–3 |
-| 24 | `scripts/compare_runs.py` | Comparar só via dashboard | CLI tabela + JSON diff summaries | Export comparativo | **Plan.** | `evaluation_metrics.compare_*` |
+| 24 | `scripts/compare_runs.py`† | Comparar só via dashboard | CLI tabela + JSON diff summaries | Export comparativo | **Plan.** | `evaluation_metrics.compare_*` |
 | 25 | Registo de baseline | Compare-baselines sem manifest rico | Manifest por perfil em subpastas | 4 colunas baseline | **Parc.** | #6 |
+
+> **† Não distribuídos.** `scripts/compare_runs.py` e `scripts/export_run.py` são
+> nomes de itens **planeados** nesta spec, não ficheiros do repositório. A comparação
+> de corridas existe hoje em `llm-eval --compare-runs`.
 
 ---
 
@@ -184,7 +188,7 @@ Legenda: **Impl.** = implementado; **Parc.** = parcial no código actual; **Plan
 | # | Item | Problema | TODO checklist | Métricas dashboard | Estado | Deps. |
 |---|------|----------|----------------|-------------------|--------|-------|
 | 26 | Compressão artefactos | `outputs/` gigante | `.jsonl.gz` opcional pós-corrida | — | **Plan.** | #4 |
-| 27 | Export Parquet/DuckDB | BI externo lento em JSONL | `export_run.py` → parquet particionado | — | **Plan.** | — |
+| 27 | Export Parquet/DuckDB | BI externo lento em JSONL | `export_run.py`† → parquet particionado | — | **Plan.** | — |
 | 28 | Dedup de corridas | Runs duplicados | Hash (config+dataset+seed) no manifest | Lista duplicados | **Plan.** | #2 |
 
 ---

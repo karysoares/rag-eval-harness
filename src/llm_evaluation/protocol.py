@@ -5,6 +5,8 @@ Evita combinações enganosas (ex.: RAG sem corpus com verificação de embeddin
 
 from __future__ import annotations
 
+import hashlib
+import json
 from dataclasses import dataclass, replace
 
 from llm_evaluation.config import AppConfig
@@ -220,3 +222,19 @@ def build_protocolo_ativo(cfg: AppConfig) -> dict[str, object]:
         },
         **protocol_operational_patch(cfg.operational),
     }
+
+
+def protocolo_sha256(protocolo: dict[str, object]) -> str:
+    """Hash do protocolo **resolvido**, não do ficheiro de configuração.
+
+    `config_hash_sha256` é o SHA256 do YAML, e o YAML não declara os modelos — estes vêm
+    do ambiente (`LLM_MODEL`, `JUDGE_MODEL`). Consequência medida: dois braços de um A/B
+    de juízes partilhavam o mesmo `config_hash`, isto é, a variável independente da
+    experiência ficava fora do identificador de reprodutibilidade.
+
+    Este hash cobre o protocolo tal como a corrida o viu, modelos e endpoints incluídos,
+    e existe **a par** do outro: mudar o `config_hash` quebraria `--resume` de corridas
+    em curso.
+    """
+    canonico = json.dumps(protocolo, sort_keys=True, ensure_ascii=False, default=str)
+    return hashlib.sha256(canonico.encode("utf-8")).hexdigest()

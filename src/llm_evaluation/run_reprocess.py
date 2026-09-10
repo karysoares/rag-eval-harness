@@ -20,11 +20,20 @@ from llm_evaluation.run_artifacts import (
 )
 
 
-def provenance_block(metadados: dict[str, Any]) -> dict[str, object]:
-    """Campos de proveniência no topo do summary."""
+def provenance_block(
+    metadados: dict[str, Any], protocolo: dict[str, object] | None = None
+) -> dict[str, object]:
+    """Campos de proveniência no topo do summary.
+
+    `config_hash_sha256` identifica o ficheiro YAML; `protocolo_sha256` identifica a
+    corrida, porque inclui os modelos que vêm do ambiente e não do ficheiro.
+    """
+    from llm_evaluation.protocol import protocolo_sha256
+
     modelos = metadados.get("modelos")
     return {
         "config_hash_sha256": metadados.get("config_hash_sha256"),
+        "protocolo_sha256": (protocolo_sha256(protocolo) if protocolo else None),
         "modelos": modelos if isinstance(modelos, dict) else {},
         "versao_pacote": _package_version(),
         "git_commit": metadados.get("git_commit"),
@@ -153,7 +162,7 @@ def reprocess_run_dir(
                 )
 
             summary["metadados_corrida"] = metadados
-            summary["proveniencia"] = provenance_block(metadados)
+            summary["proveniencia"] = provenance_block(metadados, protocol)
             if protocol is not None:
                 summary["protocolo_ativo"] = protocol
             if cfg is not None and config_path is not None:

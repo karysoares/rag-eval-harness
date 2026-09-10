@@ -37,7 +37,7 @@ situações são recusadas explicitamente em vez de devolverem um valor:
 A segunda importa mais do que parece. Com todos os rótulos em `correto`, a confusão
 fica `vp = fn = 0` e `cohen_kappa` devolve **0,0** — que se lê como «o detector não
 concorda para além do acaso» quando o que aconteceu foi não haver classe com que
-concordar. É a armadilha que `references/statistics.md` chama *the constant rater*, e
+concordar. É a armadilha conhecida como *the constant rater*, e
 é exactamente o estado do fixture `tests/fixtures/hitl_fairytale_sample/` (6 rótulos,
 todos `correto`).
 

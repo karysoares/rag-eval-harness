@@ -223,6 +223,120 @@ def _compara(
     }
 
 
+def _geracao_do_braco(
+    registos: list[RunRecord], negativos: list[str], segundos: float | None
+) -> tuple[dict[str, Any], dict[str, dict[str, bool]]]:
+    """Agrega um braço a partir dos seus registos, ao vivo ou relidos do disco.
+
+    Extraída para que `--reagregar` produza exactamente o mesmo bloco que a corrida
+    produziria. O artefacto gravado em Setembro trazia só `taxa_sustentado` — o KPI que
+    a SPEC-013 existe para refutar — e a sua secção `comparacoes` corria McNemar sobre
+    essa métrica, dando p não significativo onde a métrica correcta dá p=1,6e-14. Quem
+    fosse reproduzir pelo artefacto lia o contrário da conclusão publicada.
+    """
+    medidos = {r.item_id: _sustentado(r, negativos) for r in registos}
+    sustentado = {k: v for k, v in medidos.items() if v is not None}
+    excluidos = len(medidos) - len(sustentado)
+    taxa_sustentado = _taxa(sum(sustentado.values()), len(sustentado))
+
+    produto = _metricas_produto(registos)
+    n_medidos_resp = len(produto["respondeu"])
+    taxa_respondeu = _taxa(sum(produto["respondeu"].values()), n_medidos_resp)
+    # respondeu_e_sustentado e alucinou têm denominador próprio: excluem também os
+    # itens sem veredito medível (regra 4 do CLAUDE.md), conjunto de exclusão
+    # diferente do de `respondeu` sozinho.
+    n_medidos_resp_sust = len(produto["respondeu_e_sustentado"])
+    taxa_resp_sust = _taxa(sum(produto["respondeu_e_sustentado"].values()), n_medidos_resp_sust)
+    taxa_alucinou = _taxa(sum(produto["alucinou"].values()), n_medidos_resp_sust)
+
+    geracao: dict[str, Any] = {
+        "n_medidos": len(sustentado),
+        "n_excluidos": excluidos,
+        # KPI ingénuo (ver docstring de `_sustentado`): sobe quando a recuperação
+        # piora. Fica aqui só para o contraste ficar no artefacto.
+        "taxa_aprovacao_juiz": taxa_sustentado,
+        # Variáveis dependentes correctas (SPEC-013): separam «tentou responder» de
+        # «tentou e o juiz sustentou», em vez de misturar resposta sustentada com
+        # recusa honesta num só número.
+        "n_medidos_respondeu": n_medidos_resp,
+        "taxa_respondeu": taxa_respondeu,
+        "taxa_recusou": None if taxa_respondeu is None else round(1 - taxa_respondeu, 4),
+        "n_medidos_respondeu_e_sustentado": n_medidos_resp_sust,
+        "taxa_respondeu_e_sustentado": taxa_resp_sust,
+        "taxa_alucinou": taxa_alucinou,
+    }
+    if segundos is not None:
+        geracao["segundos"] = round(segundos, 1)
+    return geracao, {
+        "taxa_aprovacao_juiz": sustentado,
+        "respondeu": produto["respondeu"],
+        "respondeu_e_sustentado": produto["respondeu_e_sustentado"],
+    }
+
+
+def _comparacoes(
+    por_braco: dict[str, dict[str, dict[str, bool]]],
+) -> dict[str, list[dict[str, Any]]]:
+    """Compara todos os pares nas três métricas, mantendo-as em planos separados."""
+    nomes = list(por_braco)
+    pares = [(a, b) for i, a in enumerate(nomes) for b in nomes[i + 1 :]]
+    # `respondeu_e_sustentado` é a comparação que sustenta a conclusão do relatório;
+    # `respondeu` isolada mostra se a propensão a tentar responder já muda sozinha;
+    # `taxa_aprovacao_juiz` fica ao lado só para mostrar que a métrica óbvia aponta
+    # ao contrário (SPEC-013).
+    return {
+        metrica: [
+            _compara(por_braco[a][metrica], por_braco[b][metrica], nome_a=a, nome_b=b)
+            for a, b in pares
+        ]
+        for metrica in ("respondeu", "respondeu_e_sustentado", "taxa_aprovacao_juiz")
+    }
+
+
+def _reagrega(args: argparse.Namespace) -> None:
+    """Recalcula `geracao` e `comparacoes` a partir dos `predictions.jsonl` gravados.
+
+    Sem API: o artefacto de reprodução deixa de poder divergir da publicação por ter
+    sido escrito por uma versão anterior do script.
+    """
+    from llm_evaluation.evaluation_metrics import load_records_from_predictions_jsonl
+
+    destino = args.saida / "ablacao_recuperacao.json"
+    if not destino.is_file():
+        raise SystemExit(f"{destino} nao existe; nada para reagregar")
+    relatorio = json.loads(destino.read_text(encoding="utf-8"))
+    negativos = list(load_config(args.config).verification.judge_aggregation_verdicts)
+
+    por_braco: dict[str, dict[str, dict[str, bool]]] = {}
+    for nome, braco in relatorio.get("bracos", {}).items():
+        pred = args.saida / nome / "predictions.jsonl"
+        if not pred.is_file():
+            print(f"[{nome}] sem predictions.jsonl; braco ignorado")
+            continue
+        registos = load_records_from_predictions_jsonl(pred)
+        anterior = (braco.get("geracao") or {}).get("segundos")
+        braco["geracao"], por_braco[nome] = _geracao_do_braco(registos, negativos, anterior)
+        g = braco["geracao"]
+        print(
+            f"[{nome:<12}] respondeu={_fmt_taxa(g['taxa_respondeu'])}  "
+            f"respondeu_e_sustentado={_fmt_taxa(g['taxa_respondeu_e_sustentado'])}  "
+            f"alucinou={_fmt_taxa(g['taxa_alucinou'])}  "
+            f"(aprovacao_juiz={_fmt_taxa(g['taxa_aprovacao_juiz'])})"
+        )
+
+    if len(por_braco) > 1:
+        relatorio["comparacoes"] = _comparacoes(por_braco)
+    relatorio["reagregado"] = {
+        "nota": (
+            "geracao e comparacoes recalculadas offline a partir dos predictions.jsonl "
+            "gravados, com as definicoes actuais de _sustentado e _metricas_produto"
+        ),
+        "sem_chamadas_api": True,
+    }
+    destino.write_text(json.dumps(relatorio, indent=2, ensure_ascii=False), encoding="utf-8")
+    print(f"\n[reescrito] {destino}")
+
+
 def main() -> None:
     # Igual ao `llm-eval`: sem isto o script pede a chave que já está no .env.
     load_dotenv()
@@ -245,7 +359,16 @@ def main() -> None:
     p.add_argument("--chunk-max-chars", type=int, default=1200, help="igual ao rag.chunk_max_chars")
     p.add_argument("--so-recuperacao", action="store_true", help="pára antes da geração")
     p.add_argument("--saida", type=Path, default=Path("outputs/ablacao"))
+    p.add_argument(
+        "--reagregar",
+        action="store_true",
+        help="recalcula geracao/comparacoes dos predictions.jsonl gravados, sem API",
+    )
     args = p.parse_args()
+
+    if args.reagregar:
+        _reagrega(args)
+        return
 
     conjunto = _conjunto(args)
     print(json.dumps(conjunto.resumo(), indent=2, ensure_ascii=False))
@@ -306,9 +429,7 @@ def main() -> None:
 
     cfg = load_config(args.config)
     negativos = list(cfg.verification.judge_aggregation_verdicts)
-    sustentados: dict[str, dict[str, bool]] = {}
-    respondeu_por_braco: dict[str, dict[str, bool]] = {}
-    resp_sust_por_braco: dict[str, dict[str, bool]] = {}
+    por_braco: dict[str, dict[str, dict[str, bool]]] = {}
     for nome, itens in itens_por_braco.items():
         print(f"\n=== geração: {nome} ({len(itens)} itens) ===")
         t0 = time.time()
@@ -329,71 +450,20 @@ def main() -> None:
                 run_dir=dir_braco,
                 config_name=str(args.config),
             )
-        medidos = {r.item_id: _sustentado(r, negativos) for r in registos}
-        sustentados[nome] = {k: v for k, v in medidos.items() if v is not None}
-        excluidos = len(medidos) - len(sustentados[nome])
-        taxa_sustentado = _taxa(sum(sustentados[nome].values()), len(sustentados[nome]))
-
-        produto = _metricas_produto(registos)
-        respondeu_por_braco[nome] = produto["respondeu"]
-        resp_sust_por_braco[nome] = produto["respondeu_e_sustentado"]
-        n_medidos_resp = len(produto["respondeu"])
-        taxa_respondeu = _taxa(sum(produto["respondeu"].values()), n_medidos_resp)
-        # respondeu_e_sustentado e alucinou têm denominador próprio: excluem
-        # também os itens sem veredito medível (regra 4 do CLAUDE.md), que é
-        # um conjunto de exclusão diferente do de `respondeu` sozinho.
-        n_medidos_resp_sust = len(produto["respondeu_e_sustentado"])
-        taxa_resp_sust = _taxa(sum(produto["respondeu_e_sustentado"].values()), n_medidos_resp_sust)
-        taxa_alucinou = _taxa(sum(produto["alucinou"].values()), n_medidos_resp_sust)
-
-        bracos[nome]["geracao"] = {
-            "n_medidos": len(sustentados[nome]),
-            "n_excluidos": excluidos,
-            # KPI ingénuo (ver docstring de `_sustentado`): sobe quando a
-            # recuperação piora. Fica aqui só para o contraste ficar no artefacto.
-            "taxa_aprovacao_juiz": taxa_sustentado,
-            # Variáveis dependentes correctas (SPEC-013): separam «tentou
-            # responder» de «tentou e o juiz sustentou», em vez de misturar
-            # resposta sustentada com recusa honesta num só número.
-            "n_medidos_respondeu": n_medidos_resp,
-            "taxa_respondeu": taxa_respondeu,
-            "taxa_recusou": None if taxa_respondeu is None else round(1 - taxa_respondeu, 4),
-            "n_medidos_respondeu_e_sustentado": n_medidos_resp_sust,
-            "taxa_respondeu_e_sustentado": taxa_resp_sust,
-            "taxa_alucinou": taxa_alucinou,
-            "segundos": round(time.time() - t0, 1),
-        }
-
+        bracos[nome]["geracao"], por_braco[nome] = _geracao_do_braco(
+            registos, negativos, time.time() - t0
+        )
+        g = bracos[nome]["geracao"]
         print(
-            f"  respondeu={_fmt_taxa(taxa_respondeu)}  "
-            f"respondeu_e_sustentado={_fmt_taxa(taxa_resp_sust)}  "
-            f"alucinou={_fmt_taxa(taxa_alucinou)}  "
-            f"(aprovação_juiz={_fmt_taxa(taxa_sustentado)})"
+            f"  respondeu={_fmt_taxa(g['taxa_respondeu'])}  "
+            f"respondeu_e_sustentado={_fmt_taxa(g['taxa_respondeu_e_sustentado'])}  "
+            f"alucinou={_fmt_taxa(g['taxa_alucinou'])}  "
+            f"(aprovação_juiz={_fmt_taxa(g['taxa_aprovacao_juiz'])})"
         )
 
-    nomes = list(sustentados)
-    pares = [(a, b) for i, a in enumerate(nomes) for b in nomes[i + 1 :]]
-    comparacoes_respondeu = [
-        _compara(respondeu_por_braco[a], respondeu_por_braco[b], nome_a=a, nome_b=b)
-        for a, b in pares
-    ]
-    comparacoes_resp_sust = [
-        _compara(resp_sust_por_braco[a], resp_sust_por_braco[b], nome_a=a, nome_b=b)
-        for a, b in pares
-    ]
-    comparacoes_aprovacao_juiz = [
-        _compara(sustentados[a], sustentados[b], nome_a=a, nome_b=b) for a, b in pares
-    ]
     relatorio["bracos"] = bracos
-    # `respondeu_e_sustentado` é a comparação que sustenta a conclusão do
-    # relatório; `respondeu` isolada mostra se a propensão a tentar responder
-    # já muda sozinha; `taxa_aprovacao_juiz` fica ao lado só para mostrar que
-    # a métrica óbvia aponta ao contrário (SPEC-013).
-    relatorio["comparacoes"] = {
-        "respondeu": comparacoes_respondeu,
-        "respondeu_e_sustentado": comparacoes_resp_sust,
-        "taxa_aprovacao_juiz": comparacoes_aprovacao_juiz,
-    }
+    comparacoes = _comparacoes(por_braco)
+    relatorio["comparacoes"] = comparacoes
     destino.write_text(json.dumps(relatorio, indent=2, ensure_ascii=False), encoding="utf-8")
 
     def _imprime(titulo: str, comparacoes: list[dict[str, Any]]) -> None:
@@ -412,10 +482,13 @@ def main() -> None:
                 f"p={mac.get('p_valor', float('nan')):.4g}  {marca}"
             )
 
-    _imprime("COMPARAÇÕES EMPARELHADAS — respondeu_e_sustentado", comparacoes_resp_sust)
+    _imprime(
+        "COMPARAÇÕES EMPARELHADAS — respondeu_e_sustentado",
+        comparacoes["respondeu_e_sustentado"],
+    )
     _imprime(
         "COMPARAÇÕES EMPARELHADAS — taxa_aprovacao_juiz (KPI ingénuo)",
-        comparacoes_aprovacao_juiz,
+        comparacoes["taxa_aprovacao_juiz"],
     )
     print(f"\n[escrito] {destino}")
 

@@ -1,0 +1,219 @@
+{
+  "origem": "outputs/run_20260902T223513Z/predictions.jsonl",
+  "reference_type": "lexical",
+  "f1_fraca_min": null,
+  "n_itens_com_rotulo": 200,
+  "nota": "tp/fn contam itens cuja referencia lexical e fraca; fp/tn os de referencia aceitavel. O sinal comparado e embedding_max_coseno < limiar. Excluidos os itens com processing_error.",
+  "linhas": [
+    {
+      "limiar": 0.1,
+      "fp_gold_correto": 0,
+      "fn_gold_incorreto": 98,
+      "tp_gold_incorreto": 1,
+      "tn_gold_correto": 101,
+      "precisao": 1.0,
+      "revocacao": 0.0101,
+      "taxa_alerta": 0.005
+    },
+    {
+      "limiar": 0.12,
+      "fp_gold_correto": 0,
+      "fn_gold_incorreto": 98,
+      "tp_gold_incorreto": 1,
+      "tn_gold_correto": 101,
+      "precisao": 1.0,
+      "revocacao": 0.0101,
+      "taxa_alerta": 0.005
+    },
+    {
+      "limiar": 0.14,
+      "fp_gold_correto": 0,
+      "fn_gold_incorreto": 98,
+      "tp_gold_incorreto": 1,
+      "tn_gold_correto": 101,
+      "precisao": 1.0,
+      "revocacao": 0.0101,
+      "taxa_alerta": 0.005
+    },
+    {
+      "limiar": 0.16,
+      "fp_gold_correto": 0,
+      "fn_gold_incorreto": 98,
+      "tp_gold_incorreto": 1,
+      "tn_gold_correto": 101,
+      "precisao": 1.0,
+      "revocacao": 0.0101,
+      "taxa_alerta": 0.005
+    },
+    {
+      "limiar": 0.18,
+      "fp_gold_correto": 0,
+      "fn_gold_incorreto": 98,
+      "tp_gold_incorreto": 1,
+      "tn_gold_correto": 101,
+      "precisao": 1.0,
+      "revocacao": 0.0101,
+      "taxa_alerta": 0.005
+    },
+    {
+      "limiar": 0.2,
+      "fp_gold_correto": 0,
+      "fn_gold_incorreto": 98,
+      "tp_gold_incorreto": 1,
+      "tn_gold_correto": 101,
+      "precisao": 1.0,
+      "revocacao": 0.0101,
+      "taxa_alerta": 0.005
+    },
+    {
+      "limiar": 0.22,
+      "fp_gold_correto": 0,
+      "fn_gold_incorreto": 98,
+      "tp_gold_incorreto": 1,
+      "tn_gold_correto": 101,
+      "precisao": 1.0,
+      "revocacao": 0.0101,
+      "taxa_alerta": 0.005
+    },
+    {
+      "limiar": 0.24,
+      "fp_gold_correto": 1,
+      "fn_gold_incorreto": 97,
+      "tp_gold_incorreto": 2,
+      "tn_gold_correto": 100,
+      "precisao": 0.6667,
+      "revocacao": 0.0202,
+      "taxa_alerta": 0.015
+    },
+    {
+      "limiar": 0.26,
+      "fp_gold_correto": 1,
+      "fn_gold_incorreto": 97,
+      "tp_gold_incorreto": 2,
+      "tn_gold_correto": 100,
+      "precisao": 0.6667,
+      "revocacao": 0.0202,
+      "taxa_alerta": 0.015
+    },
+    {
+      "limiar": 0.28,
+      "fp_gold_correto": 1,
+      "fn_gold_incorreto": 97,
+      "tp_gold_incorreto": 2,
+      "tn_gold_correto": 100,
+      "precisao": 0.6667,
+      "revocacao": 0.0202,
+      "taxa_alerta": 0.015
+    },
+    {
+      "limiar": 0.3,
+      "fp_gold_correto": 2,
+      "fn_gold_incorreto": 97,
+      "tp_gold_incorreto": 2,
+      "tn_gold_correto": 99,
+      "precisao": 0.5,
+      "revocacao": 0.0202,
+      "taxa_alerta": 0.02
+    },
+    {
+      "limiar": 0.32,
+      "fp_gold_correto": 2,
+      "fn_gold_incorreto": 97,
+      "tp_gold_incorreto": 2,
+      "tn_gold_correto": 99,
+      "precisao": 0.5,
+      "revocacao": 0.0202,
+      "taxa_alerta": 0.02
+    },
+    {
+      "limiar": 0.34,
+      "fp_gold_correto": 3,
+      "fn_gold_incorreto": 97,
+      "tp_gold_incorreto": 2,
+      "tn_gold_correto": 98,
+      "precisao": 0.4,
+      "revocacao": 0.0202,
+      "taxa_alerta": 0.025
+    },
+    {
+      "limiar": 0.36,
+      "fp_gold_correto": 3,
+      "fn_gold_incorreto": 96,
+      "tp_gold_incorreto": 3,
+      "tn_gold_correto": 98,
+      "precisao": 0.5,
+      "revocacao": 0.0303,
+      "taxa_alerta": 0.03
+    },
+    {
+      "limiar": 0.38,
+      "fp_gold_correto": 4,
+      "fn_gold_incorreto": 96,
+      "tp_gold_incorreto": 3,
+      "tn_gold_correto": 97,
+      "precisao": 0.4286,
+      "revocacao": 0.0303,
+      "taxa_alerta": 0.035
+    },
+    {
+      "limiar": 0.4,
+      "fp_gold_correto": 4,
+      "fn_gold_incorreto": 94,
+      "tp_gold_incorreto": 5,
+      "tn_gold_correto": 97,
+      "precisao": 0.5556,
+      "revocacao": 0.0505,
+      "taxa_alerta": 0.045
+    },
+    {
+      "limiar": 0.42,
+      "fp_gold_correto": 5,
+      "fn_gold_incorreto": 93,
+      "tp_gold_incorreto": 6,
+      "tn_gold_correto": 96,
+      "precisao": 0.5455,
+      "revocacao": 0.0606,
+      "taxa_alerta": 0.055
+    },
+    {
+      "limiar": 0.44,
+      "fp_gold_correto": 7,
+      "fn_gold_incorreto": 91,
+      "tp_gold_incorreto": 8,
+      "tn_gold_correto": 94,
+      "precisao": 0.5333,
+      "revocacao": 0.0808,
+      "taxa_alerta": 0.075
+    },
+    {
+      "limiar": 0.46,
+      "fp_gold_correto": 10,
+      "fn_gold_incorreto": 89,
+      "tp_gold_incorreto": 10,
+      "tn_gold_correto": 91,
+      "precisao": 0.5,
+      "revocacao": 0.101,
+      "taxa_alerta": 0.1
+    },
+    {
+      "limiar": 0.48,
+      "fp_gold_correto": 13,
+      "fn_gold_incorreto": 85,
+      "tp_gold_incorreto": 14,
+      "tn_gold_correto": 88,
+      "precisao": 0.5185,
+      "revocacao": 0.1414,
+      "taxa_alerta": 0.135
+    },
+    {
+      "limiar": 0.5,
+      "fp_gold_correto": 16,
+      "fn_gold_incorreto": 83,
+      "tp_gold_incorreto": 16,
+      "tn_gold_correto": 85,
+      "precisao": 0.5,
+      "revocacao": 0.1616,
+      "taxa_alerta": 0.16
+    }
+  ]
+}

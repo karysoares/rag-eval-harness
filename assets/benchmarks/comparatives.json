@@ -1,7 +1,7 @@
 {
-  "schema_version": "1.1",
+  "schema_version": "1.2",
   "gerado_em_utc": "2026-06-06T18:05:02.149268+00:00",
-  "nota": "Comparativos versionados; regenerar com scripts/export_comparatives.py",
+  "nota": "Comparativos versionados; regenerar com scripts/export_comparatives.py. Cada entrada carrega proveniencia.artefactos_presentes: false significa que o numero foi medido mas a corrida que o sustenta ja nao esta no repositorio.",
   "eixos": {
     "interno": {
       "planos_kpi": [
@@ -46,11 +46,15 @@
           "run_id": "run_20260517T190713Z",
           "config": "configs/ptbr_fairytale_full.yaml",
           "metricas": {
-            "media_meteor": 0.783,
             "media_rouge_l_f": 0.38,
             "media_bleu": 0.206,
             "taxa_juiz_sustentado_diagnostico": 0.796,
             "taxa_alerta": 0.0
+          },
+          "proveniencia": {
+            "run_id": "run_20260517T190713Z",
+            "artefactos_presentes": false,
+            "motivo": "outputs/run_20260517T190713Z nao esta no repositorio; numero medido mas nao reverificavel"
           }
         },
         {
@@ -58,11 +62,15 @@
           "run_id": "run_20260517T215023Z",
           "config": "configs/ptbr_fairytale_full.yaml",
           "metricas": {
-            "media_meteor": 0.823,
             "media_rouge_l_f": 0.366,
             "media_bleu": 0.193,
             "taxa_juiz_sustentado_diagnostico": 0.954,
             "taxa_alerta": 0.015
+          },
+          "proveniencia": {
+            "run_id": "run_20260517T215023Z",
+            "artefactos_presentes": false,
+            "motivo": "outputs/run_20260517T215023Z nao esta no repositorio; numero medido mas nao reverificavel"
           }
         },
         {
@@ -70,11 +78,15 @@
           "run_id": "run_20260518T074031Z",
           "config": "configs/ptbr_fairytale_full.yaml",
           "metricas": {
-            "media_meteor": 0.826,
             "media_rouge_l_f": 0.367,
             "media_bleu": 0.191,
             "taxa_juiz_sustentado_diagnostico": 0.915,
             "taxa_alerta": 0.007
+          },
+          "proveniencia": {
+            "run_id": "run_20260518T074031Z",
+            "artefactos_presentes": false,
+            "motivo": "outputs/run_20260518T074031Z nao esta no repositorio; numero medido mas nao reverificavel"
           }
         },
         {
@@ -82,15 +94,20 @@
           "run_id": "run_20260606T121845Z",
           "config": "configs/ptbr_fairytale_tuned.yaml",
           "metricas": {
-            "media_meteor": 0.901,
             "media_rouge_l_f": 0.349,
             "media_bleu": 0.175,
             "taxa_juiz_sustentado_diagnostico": 0.78,
             "taxa_alerta": 0.0
+          },
+          "proveniencia": {
+            "run_id": "run_20260606T121845Z",
+            "artefactos_presentes": false,
+            "motivo": "outputs/run_20260606T121845Z nao esta no repositorio; numero medido mas nao reverificavel"
           }
         }
       ],
-      "nota": "Mesmo harness; variam YAML, calibração embedding e parâmetros RAG/geração."
+      "nota": "Historico de configuracao, NAO uma comparacao: entre corridas variam o YAML, a calibracao de embedding e os parametros de RAG/geracao ao mesmo tempo, pelo que a diferenca nao e atribuivel a nenhum deles. METEOR foi retirado porque a media dependia de um denominador que estes artefactos ja nao permitem apurar.",
+      "tipo": "historico"
     },
     "referencia_tuned_n1025": {
       "eixo": "interno",
@@ -98,13 +115,13 @@
       "config": "configs/ptbr_fairytale_tuned.yaml",
       "harness": {
         "n_itens": 1025,
-        "media_meteor": 0.9009349610691344,
         "media_rouge_l_f": 0.3491728408306999,
         "media_bleu": 0.1745584701250178,
         "media_f1_token": 0.3471017512776025,
         "taxa_chunk_ouro_top_k": 1.0,
         "taxa_juiz_sustentado_diagnostico": 0.7795121951219512,
-        "taxa_alerta": 0.0
+        "taxa_alerta": 0.0,
+        "meteor_omitido": "denominador por metrica indeterminavel neste artefacto (corrida anterior a n_por_metrica); sem wordnet o METEOR so pontua pares quase identicos, logo a media e enviesada para cima"
       },
       "policy": {
         "run_id": "run_20260606T121845Z",
@@ -130,6 +147,11 @@
           "passou": true,
           "fp_embedding_e_juiz": 0.0
         }
+      },
+      "proveniencia": {
+        "run_id": "run_20260606T121845Z",
+        "artefactos_presentes": false,
+        "motivo": "outputs/run_20260606T121845Z nao esta no repositorio; numero medido mas nao reverificavel"
       }
     },
     "externo_ragas_amostra": {
@@ -152,7 +174,12 @@
         "taxa_juiz_sustentado": 0.72,
         "media_f1_token": 0.4501750679377009
       },
-      "nota": "RAGAS usa LLM externo; diagnóstico, não ground truth."
+      "nota": "RAGAS usa LLM externo; diagnóstico, não ground truth.",
+      "proveniencia": {
+        "run_id": "run_20260606T121845Z",
+        "artefactos_presentes": false,
+        "motivo": "outputs/run_20260606T121845Z nao esta no repositorio; numero medido mas nao reverificavel"
+      }
     },
     "calibracao_p0": {
       "eixo": "calibracao_p0",
@@ -265,7 +292,13 @@
           "kappa": 0.0
         }
       },
-      "nota": "Amostra humana pequena; não extrapolar ao corpus."
+      "nota": "Amostra humana pequena; não extrapolar ao corpus.",
+      "proveniencia": {
+        "run_id": "run_20260517T190713Z",
+        "artefactos_presentes": false,
+        "motivo": "outputs/run_20260517T190713Z nao esta no repositorio; numero medido mas nao reverificavel"
+      },
+      "nota_degenerada": "6 itens adjudicados, todos 'correto': precisao, revocacao e kappa ficam indefinidos (avaliador constante). Abaixo do portao MIN_ROTULOS_PARA_METRICAS=10 introduzido em hitl_metrics.py; o plano C esta documentado e vazio."
     }
   }
 }

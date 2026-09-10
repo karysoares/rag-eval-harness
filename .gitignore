@@ -52,15 +52,15 @@ docs/*
 !docs/specs/
 !docs/techniques/
 !docs/benchmarks/
+# Evidência: agregados sem PII, versionados porque o README cita cada número a
+# partir deles. Um link publicado para um ficheiro ignorado é um 404 na clonagem.
+!docs/evidencia/
 # Notas internas / pessoais — nunca publicar:
 # PARECER_HIRING.md, DIARIO_DE_BORDO.md, learning-notes.md,
 # RELATORIO_AVALIACAO.md, RELATORIO_MELHORIAS.md, RELEASE_CHECKLIST.md,
-# CONTRIBUTING.md e SECURITY.md (duplicam os da raiz), evidencia/ (corridas locais).
+# CONTRIBUTING.md e SECURITY.md (duplicam os da raiz).
 
 notebooks/
 # Cursor IDE (local only)
 .cursor/
 .idea/
-
-# Agregados publicados localmente (sem PII)
-assets/evidencia/

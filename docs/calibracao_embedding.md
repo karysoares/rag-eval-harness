@@ -7,7 +7,7 @@ Com `qualquer_critico`, embedding baixo + juiz `sustentado` gera **falso positiv
 ## Mitigação (P0)
 
 - **Agregação:** `embedding_e_juiz` — anomalia só se embedding baixo **e** juiz negativo (tiers de agregação em `judge_aggregation_verdicts`, sem `incompleto` por defeito em RAG pt-BR).
-- **Limiar:** `verification.embedding_min_cosine` (ex. `0.28` em FairytaleQA); calibrar com `scripts/validate_embedding_policy.py`.
+- **Limiar:** `verification.embedding_min_cosine` — `0.24` nos configs FairytaleQA, `0.26` em [`ptbr_fairytale_tuned.yaml`](../configs/ptbr_fairytale_tuned.yaml). Curva medida em [`evidencia/embedding_sweep_fairytale_200.json`](evidencia/embedding_sweep_fairytale_200.json); validar a política com `scripts/validate_embedding_policy.py`.
 
 ## Validação offline
 
@@ -24,15 +24,32 @@ Com corrida concluída (`predictions.jsonl`):
 uv run python scripts/sweep_embedding_threshold.py outputs/run_<id>/predictions.jsonl
 ```
 
-Gera `embedding_sweep.csv` e `.json` com FP/FN por limiar 0.20–0.45. Use a tabela para justificar `embedding_min_cosine` no YAML.
+Gera `embedding_sweep.csv` e `.json` com FP/FN, precisão, revocação e taxa de alerta por limiar. O rótulo de referência sai de `referencia_incorreta`, pelo que o sweep corre tanto em `answer_lists` como em `lexical`.
+
+### O que a curva medida diz (e o que não diz)
+
+Sweep de 0,10 a 0,50 sobre `run_20260902T223513Z` (FairytaleQA pt-BR, N=200, `reference_type: lexical`, 99 itens com referência léxica fraca):
+
+| limiar | FP (ref. aceitável) | TP (ref. fraca) | precisão | revocação | taxa de alerta |
+|---|---|---|---|---|---|
+| 0,22 | 0 | 1 | 1,000 | 0,010 | 0,005 |
+| **0,24** | 1 | 2 | 0,667 | 0,020 | 0,015 |
+| 0,28 | 1 | 2 | 0,667 | 0,020 | 0,015 |
+| 0,34 | 3 | 2 | 0,400 | 0,020 | 0,025 |
+| 0,42 | 5 | 6 | 0,545 | 0,061 | 0,055 |
+| 0,50 | 16 | 16 | 0,500 | 0,162 | 0,160 |
+
+**Não há ótimo.** A revocação vai de 1% a 16% em todo o intervalo e a precisão fica perto de 0,5 — ou seja, o coseno resposta↔contexto **não discrimina** a fraqueza da referência léxica a nenhum limiar. Isto é o resultado esperado, não uma falha de calibração: são planos métricos distintos (grounding vs sobreposição léxica), como a [ADR 0001](decisions/0001-reference-types.md) e o `README` já dizem sobre o κ baixo entre juiz e referência.
+
+A consequência prática é que `embedding_min_cosine` **não se escolhe por curva PR**. Escolhe-se como piso conservador: `0.24` mantém a taxa de alerta em 1,5% e o falso alarme em 1 item de 101 com referência aceitável. Subir o limiar compra revocação irrisória a troco de falsos alarmes lineares. Quem quiser um detector com revocação útil precisa de NLI, não de um limiar de coseno — ver [`techniques/nli-and-claim-grounding.md`](techniques/nli-and-claim-grounding.md).
 
 Critério CI: taxa de FP em referência aceitável com `embedding_e_juiz` &lt; 15% no fixture `tests/fixtures/policy_validation_run/` (`reference_type: answer_lists`, `gold_correto` booleano).
 
-Para datasets **`reference_type: lexical`** (ex. FairytaleQA), o script usa overlap léxico (F1/EM) como referência aceitável — não `gold_correto`, que é sempre `null`. Com `reference_type: none`, o critério P0 é N/A (`criterio_p0.aplicavel: false`).
+Para datasets **`reference_type: lexical`** (ex. FairytaleQA), tanto `validate_embedding_policy.py` como `sweep_embedding_threshold.py` usam overlap léxico (F1/EM) como referência aceitável — não `gold_correto`, que é sempre `null`. Com `reference_type: none`, o critério P0 é N/A (`criterio_p0.aplicavel: false`) e o sweep recusa-se a correr, em vez de devolver uma tabela de zeros.
 
 ## Evidência
 
-Corridas de referência e CSVs de fila humana: `docs/evidencia/` (não versionar outputs grandes; copiar manifestos e sumários relevantes).
+Agregados versionados em [`evidencia/`](evidencia/README.md) — sem PII, publicados por `scripts/publish_run_evidence.py`. Os `predictions.jsonl` completos ficam locais (`outputs/`, gitignored).
 
 ## Limiares operacionais (YAML)
 
