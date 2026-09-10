@@ -1,0 +1,188 @@
+{
+ "schema_version": "1",
+ "gerado_em_utc": "2026-09-10T15:03:31.822017+00:00",
+ "titulo": "Braço de juiz local com o gerador partilhado — corrida parcial (93 de 200)",
+ "porque_existe": "O A/B publicado tinha o braco local a variar juiz E gerador. Esta corrida repete-o com o gerador gpt-4o-mini partilhado, para separar as duas hipoteses. Os creditos da API esgotaram-se ao item 94, pelo que a corrida esta incompleta.",
+ "desenho": {
+  "n_pedidos": 200,
+  "n_avaliados": 93,
+  "n_perdidos_por_quota": 107,
+  "subconjunto": "primeiros 93 itens da ordem do dataset (shuffle: false)",
+  "referencia": "lexical (F1 token), recalculada com a normalizacao portuguesa actual",
+  "protocolo_sha256": "2ccb58b9b82a586a9a53947d296e8e1d2d3ef08cdc1ecb4c0103f1b812b7080f",
+  "config": "configs/ptbr_fairytale_judge_ab.yaml",
+  "nota_emparelhamento": "Todos os bracos foram restringidos aos mesmos 93 id_item, pelo que a comparacao e emparelhada. O braco gpt-4o contribui 84 porque ja perdera 9 itens por quota na corrida original."
+ },
+ "bracos": [
+  {
+   "label": "qwen2.5_local_gerador_partilhado",
+   "run_id": "run_20260910T142255Z",
+   "juiz": "qwen2.5:latest (Ollama)",
+   "gerador": "gpt-4o-mini",
+   "juiz_igual_ao_gerador": false,
+   "n_itens_no_subconjunto": 93,
+   "media_f1_token": 0.357,
+   "exatidao_vs_referencia_lexical": 0.6236559139784946,
+   "exatidao_ic95_wilson": [
+    0.5221342705133758,
+    0.715366968623524
+   ],
+   "cohen_kappa": 0.2439024390243903,
+   "cohen_kappa_ic95_bootstrap": {
+    "ic_inferior": 0.0501,
+    "ic_superior": 0.4165,
+    "confianca": 0.95,
+    "n_itens": 93,
+    "n_reamostragens": 2000,
+    "n_reamostragens_degeneradas": 0
+   },
+   "ece": 0.3188,
+   "ece_ic95_bootstrap": {
+    "ic_inferior": 0.2263,
+    "ic_superior": 0.4199,
+    "confianca": 0.95,
+    "n_itens": 93,
+    "n_reamostragens": 2000
+   }
+  },
+  {
+   "label": "qwen2.5_local_confundido",
+   "run_id": "run_20260902T200556Z",
+   "juiz": "qwen2.5:latest (Ollama)",
+   "gerador": "llama3.2:latest (Ollama)",
+   "juiz_igual_ao_gerador": false,
+   "n_itens_no_subconjunto": 93,
+   "media_f1_token": 0.2822,
+   "exatidao_vs_referencia_lexical": 0.5483870967741935,
+   "exatidao_ic95_wilson": [
+    0.44733119871635174,
+    0.6456040687720004
+   ],
+   "cohen_kappa": 0.1696428571428571,
+   "cohen_kappa_ic95_bootstrap": {
+    "ic_inferior": 0.0048,
+    "ic_superior": 0.3366,
+    "confianca": 0.95,
+    "n_itens": 93,
+    "n_reamostragens": 2000,
+    "n_reamostragens_degeneradas": 0
+   },
+   "ece": 0.4091,
+   "ece_ic95_bootstrap": {
+    "ic_inferior": 0.3091,
+    "ic_superior": 0.507,
+    "confianca": 0.95,
+    "n_itens": 93,
+    "n_reamostragens": 2000
+   }
+  },
+  {
+   "label": "gpt-5.4-nano",
+   "run_id": "run_20260902T223513Z",
+   "juiz": "gpt-5.4-nano",
+   "gerador": "gpt-4o-mini",
+   "juiz_igual_ao_gerador": false,
+   "n_itens_no_subconjunto": 93,
+   "media_f1_token": 0.3683,
+   "exatidao_vs_referencia_lexical": 0.5268817204301075,
+   "exatidao_ic95_wilson": [
+    0.42636839646712893,
+    0.6252623076930667
+   ],
+   "cohen_kappa": 0.012071463061323123,
+   "cohen_kappa_ic95_bootstrap": {
+    "ic_inferior": -0.1171,
+    "ic_superior": 0.1529,
+    "confianca": 0.95,
+    "n_itens": 93,
+    "n_reamostragens": 2000,
+    "n_reamostragens_degeneradas": 0
+   },
+   "ece": 0.3645,
+   "ece_ic95_bootstrap": {
+    "ic_inferior": 0.2705,
+    "ic_superior": 0.4569,
+    "confianca": 0.95,
+    "n_itens": 93,
+    "n_reamostragens": 2000
+   }
+  },
+  {
+   "label": "gpt-4o",
+   "run_id": "run_20260902T200922Z",
+   "juiz": "gpt-4o",
+   "gerador": "gpt-4o-mini",
+   "juiz_igual_ao_gerador": false,
+   "n_itens_no_subconjunto": 84,
+   "media_f1_token": 0.3545,
+   "exatidao_vs_referencia_lexical": 0.4878048780487805,
+   "exatidao_ic95_wilson": [
+    0.3826071216079986,
+    0.5940941514344423
+   ],
+   "cohen_kappa": -0.0011627906976743349,
+   "cohen_kappa_ic95_bootstrap": {
+    "ic_inferior": -0.0729,
+    "ic_superior": 0.0682,
+    "confianca": 0.95,
+    "n_itens": 82,
+    "n_reamostragens": 2000,
+    "n_reamostragens_degeneradas": 0
+   },
+   "ece": 0.489,
+   "ece_ic95_bootstrap": {
+    "ic_inferior": 0.3793,
+    "ic_superior": 0.5878,
+    "confianca": 0.95,
+    "n_itens": 82,
+    "n_reamostragens": 2000
+   }
+  },
+  {
+   "label": "gpt-4o-mini_auto",
+   "run_id": "run_20260902T211159Z",
+   "juiz": "gpt-4o-mini",
+   "gerador": "gpt-4o-mini",
+   "juiz_igual_ao_gerador": true,
+   "n_itens_no_subconjunto": 93,
+   "media_f1_token": 0.3552,
+   "exatidao_vs_referencia_lexical": 0.4838709677419355,
+   "exatidao_ic95_wilson": [
+    0.3849752909016495,
+    0.5840462866022331
+   ],
+   "cohen_kappa": -0.02151029748283757,
+   "cohen_kappa_ic95_bootstrap": {
+    "ic_inferior": -0.065,
+    "ic_superior": 0.0,
+    "confianca": 0.95,
+    "n_itens": 93,
+    "n_reamostragens": 2000,
+    "n_reamostragens_degeneradas": 0
+   },
+   "ece": 0.4849,
+   "ece_ic95_bootstrap": {
+    "ic_inferior": 0.3839,
+    "ic_superior": 0.5828,
+    "confianca": 0.95,
+    "n_itens": 93,
+    "n_reamostragens": 2000
+   }
+  }
+ ],
+ "o_que_isto_estabelece": [
+  "O gerador explicava parte substancial da diferenca: nos mesmos 93 itens, o F1 medio passa de 0,282 (gerador llama3.2) para 0,357 (gerador gpt-4o-mini). O braco local original estava de facto a medir um gerador mais fraco.",
+  "Com o gerador controlado, o juiz local mantem o kappa mais alto (0,244) e e o unico braco cujo intervalo de kappa exclui zero neste subconjunto."
+ ],
+ "o_que_isto_NAO_estabelece": [
+  "Nao fecha a questao. Os intervalos de kappa do juiz local [0,050, 0,417] e do gpt-5.4-nano [-0,117, 0,153] sobrepoem-se, pelo que os dois nao estao separados.",
+  "O subconjunto e um prefixo, nao uma amostra aleatoria: os 93 itens sao os primeiros da ordem do dataset. No FairytaleQA os itens agrupam-se por historia, logo o prefixo cobre menos historias do que 93 itens sorteados cobririam.",
+  "Com N=93 em vez de 200, todos os intervalos alargam. A comparacao publicada no README continua a ser a dos tres bracos de API sobre 200 itens."
+ ],
+ "limitacoes": [
+  "Corrida incompleta: 107 de 200 itens perdidos por esgotamento de creditos da API (HTTP 429, \"no credits remaining\"). Excluidos de todos os denominadores.",
+  "Subconjunto nao aleatorio (prefixo da ordem do dataset).",
+  "Sem adjudicacao humana: a referencia continua a ser F1 lexico.",
+  "Repetir a corrida completa exige creditos de API; o juiz local nao tem custo."
+ ]
+}

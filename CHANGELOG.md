@@ -46,6 +46,14 @@ Alterações relevantes do projeto, no formato [Keep a Changelog](https://keepac
 - `scripts/bench_concurrency.py` and `docs/evidencia/bench_concorrencia.json`: the concurrency
   speedup and embedding cache hit rate had no script, no test and no artifact. Measured
   18.95/4.76/2.56 s (1.0x/3.98x/7.40x) and 84.7% (508 hits, 92 misses).
+- `docs/evidencia/judge_local_gerador_partilhado_93.json`: a partial re-run of the local judge
+  arm with the shared `gpt-4o-mini` generator, to separate judge from generator. It separates
+  them both ways: on the same items the mean F1 rises from 0.282 to 0.357, so the weaker
+  generator did account for much of the original gap — and the local judge still holds the
+  highest kappa once the generator is controlled (0.244, the only arm whose interval excludes
+  zero there). Not settled: the API credits ran out at item 94, so it covers 93 of 200 items as
+  a prefix of the dataset order rather than a random sample, and the intervals still overlap
+  `gpt-5.4-nano`'s. The published table stays as the three-API-arm comparison over 200 items.
 - `docs/evidencia/embedding_sweep_fairytale_200.json`: the FP/FN curve for
   `embedding_min_cosine` that `docs/calibracao_embedding.md` had promised since v0.4.1. It
   shows there is no optimum — recall stays between 1% and 16% across 0.10-0.50, because cosine
