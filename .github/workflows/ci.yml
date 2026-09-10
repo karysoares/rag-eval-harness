@@ -9,6 +9,12 @@ on:
 jobs:
   quality:
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # requires-python é >=3.11 e o CI validava um único interpretador implícito,
+        # pelo que uma incompatibilidade nas versões suportadas passava sem ser vista.
+        python-version: ["3.11", "3.12", "3.13"]
     steps:
       - uses: actions/checkout@v4
 
@@ -19,6 +25,8 @@ jobs:
 
       - name: Sync deps
         run: uv sync --extra dev --extra dashboard
+        env:
+          UV_PYTHON: ${{ matrix.python-version }}
 
       - name: Ruff check
         run: uv run ruff check .
@@ -32,14 +40,37 @@ jobs:
       - name: Dashboard import smoke
         run: uv run python -c "import llm_evaluation.dashboard.app; import llm_evaluation.dashboard.data"
 
+      - name: Pytest
+        run: uv run pytest --cov=llm_evaluation --cov-report=term-missing --cov-fail-under=80
+
+  # Separado do lote de qualidade porque responde a outra pergunta: não «o código
+  # está limpo» mas «a medição continua a dar o mesmo». Produz uma corrida real
+  # (pipeline completo, LLM mockado, sem rede), audita-a com --strict e compara os
+  # KPIs com um golden versionado.
+  evaluation:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v4
+        with:
+          version: "latest"
+
+      - name: Sync deps
+        run: uv sync --extra dev
+
+      - name: Corrida real offline — artefactos, auditoria strict e gate de KPI
+        run: uv run pytest tests/test_ci_corrida_real_offline.py -q
+
+      - name: Smoke pipeline (smoke_amostra.yaml, mock LLM — sem API)
+        run: uv run pytest tests/test_pipeline_e2e_mock.py -q
+
       - name: Audit run fixture (strict)
         run: uv run python scripts/audit_run.py tests/fixtures/audit_runs --strict
 
       - name: Validate embedding policy (fixture)
         run: uv run python scripts/validate_embedding_policy.py tests/fixtures/policy_validation_run
 
-      - name: Smoke pipeline (smoke_amostra.yaml, mock LLM — no API)
-        run: uv run pytest tests/test_pipeline_e2e_mock.py -q
-
-      - name: Pytest
-        run: uv run pytest --cov=llm_evaluation --cov-report=term-missing --cov-fail-under=80
+      - name: Contratos de configuração (idioma por corpus, METEOR desligado)
+        run: uv run pytest tests/test_configs_idioma_e_meteor.py tests/test_comparatives_fixture.py -q

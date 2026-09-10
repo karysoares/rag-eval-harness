@@ -1,0 +1,25 @@
+{
+  "nota": "KPIs de uma corrida offline determinística (LLM mockado, backend hash) sobre configs/smoke_amostra.yaml. Um diff aqui e uma mudanca de comportamento do harness sao a mesma coisa: se for intencional, regenere e explique no commit.",
+  "config": "configs/smoke_amostra.yaml",
+  "tolerancia": 1e-06,
+  "kpis": {
+    "n_itens": 2,
+    "n_itens_avaliados": 2,
+    "n_itens_com_erro_execucao": 0,
+    "taxa_alerta": 0.0,
+    "tipo_referencia_ativo": "lexical",
+    "lexical.media_f1_token": 0.14285714285714285,
+    "lexical.media_rouge_l_f": 0.14285714285714285,
+    "lexical.n_itens_pontuados": 2,
+    "lexical.n_por_metrica": {
+      "bleu": 0,
+      "rouge_l_f": 2,
+      "meteor": 0,
+      "similaridade_levenshtein": 0,
+      "f1_token": 2
+    },
+    "lexical.idioma_normalizacao": [
+      "pt"
+    ]
+  }
+}

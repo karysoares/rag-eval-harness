@@ -116,6 +116,10 @@ markers = [
 
 [tool.coverage.run]
 omit = [
-    "*/dashboard/app.py",
+    # Bootstrap do Streamlit: 13 linhas que invocam o binário, sem lógica própria.
+    # `dashboard/app.py` deixou de estar aqui: excluí-la punha 1160 linhas de
+    # superfície entregue fora do denominador, pelo que o portão de 80% não via
+    # que nenhuma função de renderização era executada em teste nenhum.
+    # Ver tests/test_dashboard_render.py.
     "*/dashboard/launch.py",
 ]
