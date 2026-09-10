@@ -7,6 +7,7 @@ por proxies e gateways — chegava lá em claro.
 
 from __future__ import annotations
 
+import inspect
 import json
 
 import httpx
@@ -116,3 +117,75 @@ class TestCredenciaisForaDoFormatoOpenAI:
         """Diz qual credencial falhou sem revelar o valor."""
         limpo = redact_secrets("https://host/v1?api-key=abc123def456ghi789")
         assert "api-key=***" in limpo
+
+
+class TestFormasSemQueryString:
+    """Credenciais que não vêm em query-string nem com prefixo de fornecedor.
+
+    O padrão da query-string exige `?` ou `&`, pelo que a forma de cabeçalho
+    (`x-api-key: <valor>`) passava intacta — e é justamente a forma que um corpo de
+    resposta usa quando ecoa os cabeçalhos recebidos, o incidente que originou a
+    invariante 1. Chaves sem prefixo reconhecível (Google, AWS, Slack) também.
+    """
+
+    def test_cabecalho_x_api_key(self) -> None:
+        saida = redact_secrets("x-api-key: 1234567890abcdefghij")
+        assert "1234567890abcdefghij" not in saida
+        assert "x-api-key" in saida, "o nome diz qual credencial falhou; deve sobreviver"
+
+    def test_cabecalho_api_key_sem_prefixo_x(self) -> None:
+        assert "1234567890abcdefghij" not in redact_secrets("api-key: 1234567890abcdefghij")
+
+    def test_chave_google(self) -> None:
+        chave = "AIzaSyD1234567890abcdefghijklmnopqrstu"
+        assert chave not in redact_secrets(f"erro com {chave} no corpo")
+
+    def test_access_key_id_aws(self) -> None:
+        assert "AKIAIOSFODNN7EXAMPLE" not in redact_secrets("id AKIAIOSFODNN7EXAMPLE recusado")
+
+    def test_token_slack(self) -> None:
+        assert "xoxb-1234567890-abcdefghij" not in redact_secrets(
+            "token xoxb-1234567890-abcdefghij"
+        )
+
+    def test_texto_benigno_sobrevive(self) -> None:
+        """Redigir demasiado torna as mensagens de erro inúteis para depurar."""
+        for benigno in (
+            "HTTP 401 de https://api.openai.com",
+            "modelo qwen2.5:7b nao encontrado",
+            "erro no campo resposta: contexto insuficiente",
+            "rouge_l_f: 0.38",
+        ):
+            assert redact_secrets(benigno) == benigno, benigno
+
+
+class TestEscritoresDeMetaQueEscapavam:
+    """Quatro sítios escreviam em `meta` sem passar por `redact_secrets`.
+
+    Só `pipeline._failed_record` redigia. Estes quatro chegam ao mesmo
+    `predictions.jsonl` publicado por caminhos diferentes.
+    """
+
+    def test_generation_structured_output_error(self) -> None:
+        import llm_evaluation.generation as gen
+        from llm_evaluation.generation import _RESPONDER_INVALID_ANSWER_PT  # noqa: F401
+        from llm_evaluation.structured_output import StructuredOutputError
+
+        fonte = inspect.getsource(gen)
+        assert "redact_secrets(str(exc))" in fonte
+        assert StructuredOutputError is not None
+
+    def test_critico_structured_output_error(self) -> None:
+        import llm_evaluation.orchestration.multi as multi
+
+        assert "redact_secrets(str(exc))" in inspect.getsource(multi)
+
+    def test_metricas_lexicas_erro(self) -> None:
+        from llm_evaluation.lexical_metrics import attach_lexical_to_meta
+
+        assert "redact_secrets(msg)" in inspect.getsource(attach_lexical_to_meta)
+
+    def test_ragas_erro(self) -> None:
+        import llm_evaluation.benchmarks.ragas_adapter as ragas
+
+        assert "redact_secrets(str(e))" in inspect.getsource(ragas)

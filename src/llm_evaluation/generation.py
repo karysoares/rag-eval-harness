@@ -5,7 +5,7 @@ from __future__ import annotations
 from typing import Any
 
 from llm_evaluation.config import PromptStyle
-from llm_evaluation.llm_client import LlmClient
+from llm_evaluation.llm_client import LlmClient, redact_secrets
 from llm_evaluation.prompt_resources import load_prompt_text
 from llm_evaluation.responder_schema import (
     RESPONDER_SCHEMA_VERSION,
@@ -125,7 +125,9 @@ def generate_answer(
         error_meta: dict[str, Any] = {
             "schema_version": RESPONDER_SCHEMA_VERSION,
             "schema_invalid": True,
-            "structured_output_error": str(exc),
+            # Chega a meta.qualidade_geracao em predictions.jsonl, que é publicado:
+            # a mensagem do fornecedor pode ecoar a credencial enviada (invariante 1).
+            "structured_output_error": redact_secrets(str(exc)),
             "confianca": None,
             "contexto_insuficiente": None,
         }

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from llm_evaluation.llm_client import redact_secrets
 from llm_evaluation.types import RunRecord
 
 
@@ -96,7 +97,9 @@ def run_ragas_sample(
                 out[f"media_{key}"] = float(val)
         return out
     except Exception as e:
-        return {"disponivel": True, "n": len(rows), "erro": str(e)}
+        # RAGAS passa por LangChain/OpenAI: é o sítio onde um objecto de erro do
+        # fornecedor tem mais probabilidade de arrastar configuração ou credencial.
+        return {"disponivel": True, "n": len(rows), "erro": redact_secrets(str(e))}
 
 
 def summarize_harness_grounding(records: list[RunRecord]) -> dict[str, object]:

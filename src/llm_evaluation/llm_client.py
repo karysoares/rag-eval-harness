@@ -142,6 +142,21 @@ _SECRET_PATTERNS = (
     # xAI (``xai-``). O separador varia entre ``-`` e ``_``.
     re.compile(r"\b(sk|rk|pk|gsk|ghp|ghs|gho|glpat|hf|xai|dop|shpat)[-_][A-Za-z0-9_\-]{16,}"),
     re.compile(r"\bBearer\s+[A-Za-z0-9._\-]{16,}"),
+    # Credencial em forma de cabeçalho, sem query-string: ``x-api-key: <valor>`` e
+    # ``api-key: <valor>``. É a forma que um corpo de resposta usa quando ecoa os
+    # cabeçalhos recebidos — o incidente citado na invariante 1 — e o padrão da
+    # query-string não a apanhava porque exige ``?`` ou ``&``.
+    re.compile(
+        r"((?:x-)?(?:api[-_]?key|api[-_]?token|auth[-_]?token|secret)\s*[:=]\s*)"
+        r"[\"']?[A-Za-z0-9._\-]{16,}[\"']?",
+        re.IGNORECASE,
+    ),
+    # Chaves sem prefixo reconhecível, mascaradas pela forma: Google API
+    # (``AIza`` + 35), AWS access key id (``AKIA``/``ASIA`` + 16) e Slack
+    # (``xox[bpsa]-``). Sem isto passavam intactas.
+    re.compile(r"\bAIza[0-9A-Za-z_\-]{30,}"),
+    re.compile(r"\b(?:AKIA|ASIA)[0-9A-Z]{16}\b"),
+    re.compile(r"\bxox[bpsare]-[0-9A-Za-z\-]{10,}"),
 )
 
 
@@ -158,9 +173,10 @@ def redact_secrets(text: str) -> str:
     def _substituir(m: re.Match[str]) -> str:
         if m.group(0).endswith("@"):
             return "***@"
-        # Quando o padrão isola o nome do parâmetro (``?api-key=``), preserva-se
-        # o nome e mascara-se só o valor: diz qual credencial falhou sem a expor.
-        if m.re.groups and m.group(1) and m.group(1).endswith("="):
+        # Quando o padrão isola o nome do parâmetro (``?api-key=``, ``x-api-key:``),
+        # preserva-se o nome e mascara-se só o valor: diz qual credencial falhou
+        # sem a expor.
+        if m.re.groups and m.group(1) and m.group(1).rstrip().endswith(("=", ":")):
             return f"{m.group(1)}***"
         return "***"
 

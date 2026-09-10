@@ -16,7 +16,7 @@ from llm_evaluation.critic_schema import (
     critic_to_dict,
     validate_critic_response,
 )
-from llm_evaluation.llm_client import LlmClient
+from llm_evaluation.llm_client import LlmClient, redact_secrets
 from llm_evaluation.pipeline import run_batch
 from llm_evaluation.prompt_resources import load_prompt_text
 from llm_evaluation.structured_output import (
@@ -58,7 +58,8 @@ def _critic(
         return {
             "schema_version": CRITIC_SCHEMA_VERSION,
             "schema_invalid": True,
-            "structured_output_error": str(exc),
+            # Ver generation.py: o mesmo texto, o mesmo artefacto publicado.
+            "structured_output_error": redact_secrets(str(exc)),
             "cadeia_de_pensamento": [],
             "problemas": [],
             "nota": "Crítica indisponível: saída estruturada inválida.",

@@ -11,6 +11,7 @@ from rouge_score import rouge_scorer
 from sacrebleu.metrics import BLEU  # type: ignore[attr-defined]
 
 from llm_evaluation.config import AppConfig, LexicalMetricsConfig, LexicalReferenceMode
+from llm_evaluation.llm_client import redact_secrets
 from llm_evaluation.squad_metrics import squad_scores
 from llm_evaluation.types import EvalItem
 from llm_evaluation.verification.gold import normalize_answer
@@ -230,7 +231,7 @@ def attach_lexical_to_meta(
             msg = f"{type(exc).__name__}: {exc}"
             meta["metricas_lexicas"] = {
                 "note": "erro_ao_calcular_metricas_lexicas",
-                "erro": msg[:500],
+                "erro": redact_secrets(msg)[:500],
             }
     else:
         meta["metricas_lexicas"] = empty_lexical_dict()
