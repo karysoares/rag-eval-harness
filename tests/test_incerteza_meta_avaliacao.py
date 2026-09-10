@@ -110,3 +110,57 @@ def test_familia_de_seis_comparacoes_recebe_p_ajustado() -> None:
         mc = r["mcnemar"]
         assert isinstance(mc, dict)
         assert r["p_valor_ajustado_holm"] >= mc["p_valor"]
+
+
+class TestEfeitoMinimoDetectavel:
+    """Um `p` não significativo não é prova de equivalência.
+
+    O A/B de juízes publica «todos p=1» sobre 200 itens. Sem MDE, isso lê-se como
+    «os juízes são equivalentes» quando o que se sabe é «este desenho não distinguiu
+    nada» — duas afirmações diferentes, e só uma delas é sustentada.
+    """
+
+    def test_mde_diminui_com_mais_pares(self) -> None:
+        from llm_evaluation.statistics import mcnemar_mde
+
+        pequeno = mcnemar_mde(50, 10)
+        grande = mcnemar_mde(500, 100)
+        assert pequeno is not None and grande is not None
+        assert grande["efeito_minimo_detectavel"] < pequeno["efeito_minimo_detectavel"]
+
+    def test_zero_discordantes_nao_produz_mde(self) -> None:
+        """Sem pares discordantes o desenho não distingue nada, por muito N que tenha."""
+        from llm_evaluation.statistics import mcnemar_mde
+
+        r = mcnemar_mde(1000, 0)
+        assert r is not None
+        assert r["efeito_minimo_detectavel"] is None
+        assert "equivalencia" in r["nota"]
+
+    def test_entradas_incoerentes_devolvem_nada(self) -> None:
+        from llm_evaluation.statistics import mcnemar_mde
+
+        assert mcnemar_mde(0, 0) is None
+        assert mcnemar_mde(10, 11) is None
+        assert mcnemar_mde(-1, 0) is None
+
+    def test_comparacao_emparelhada_publica_o_mde(self) -> None:
+        from llm_evaluation.evaluation_metrics import paired_significance
+
+        itens = [f"i{n}" for n in range(100)]
+        a = dict.fromkeys(itens, False)
+        b = {k: (i < 10) for i, k in enumerate(itens)}
+        res = paired_significance("a", a, "b", b)
+        assert res is not None
+        mde = res["efeito_minimo_detectavel"]
+        assert isinstance(mde, dict)
+        assert mde["n_pares"] == 100
+        assert mde["n_discordantes"] == 10
+        assert 0.0 < mde["efeito_minimo_detectavel"] < 1.0
+
+    def test_quantil_normal_bate_valores_conhecidos(self) -> None:
+        from llm_evaluation.statistics import _z_quantil
+
+        assert abs(_z_quantil(0.975) - 1.959964) < 1e-4
+        assert abs(_z_quantil(0.80) - 0.841621) < 1e-4
+        assert abs(_z_quantil(0.5)) < 1e-6

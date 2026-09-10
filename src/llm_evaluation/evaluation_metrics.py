@@ -14,6 +14,7 @@ from typing import Any, cast
 from llm_evaluation.reference_metrics import referencia_incorreta
 from llm_evaluation.statistics import (
     cohen_kappa,
+    mcnemar_mde,
     mcnemar_test,
     paired_bootstrap_diff_ci,
     wilson_ci,
@@ -688,6 +689,15 @@ def paired_significance(
     if isinstance(mc, dict):
         p = mc.get("p_valor")
         out["significativo_95"] = isinstance(p, float) and p < 0.05
+        # Um p não significativo sem MDE lê-se como «os sistemas são equivalentes»,
+        # que é uma afirmação diferente e mais forte. O MDE diz qual era a menor
+        # diferença que este desenho conseguiria distinguir de ruído.
+        n_disc = mc.get("n_discordantes")
+        n_comuns = out.get("n_itens_comuns")
+        if isinstance(n_disc, int) and isinstance(n_comuns, int):
+            mde = mcnemar_mde(n_comuns, n_disc)
+            if mde is not None:
+                out["efeito_minimo_detectavel"] = mde
     return out
 
 

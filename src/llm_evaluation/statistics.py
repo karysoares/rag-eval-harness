@@ -440,3 +440,74 @@ def holm_bonferroni(p_valores: list[float]) -> list[float]:
         corrente = max(corrente, min(1.0, candidato))
         ajustados[indice] = corrente
     return ajustados
+
+
+def _z_quantil(p: float) -> float:
+    """Quantil da normal padrão por bissecção sobre ``erf``.
+
+    Evita uma dependência de SciPy para dois valores. A bissecção em [-10, 10]
+    converge bem abaixo da precisão que um MDE reportado a três casas exige.
+    """
+    if not 0.0 < p < 1.0:
+        msg = f"quantil fora de (0,1): {p}"
+        raise ValueError(msg)
+    lo, hi = -10.0, 10.0
+    for _ in range(200):
+        meio = (lo + hi) / 2.0
+        cdf = 0.5 * (1.0 + math.erf(meio / math.sqrt(2.0)))
+        if cdf < p:
+            lo = meio
+        else:
+            hi = meio
+    return (lo + hi) / 2.0
+
+
+def mcnemar_mde(
+    n_pares: int,
+    n_discordantes: int,
+    *,
+    alpha: float = 0.05,
+    poder: float = 0.80,
+) -> dict[str, Any] | None:
+    """Efeito mínimo detectável para um desenho emparelhado com desfecho binário.
+
+    Responde à pergunta que um p=1 deixa em aberto: **qual era a diferença mais
+    pequena que este N conseguiria distinguir de ruído?** Sem isto, "não há
+    diferença significativa" confunde-se com "os sistemas são equivalentes", e num
+    A/B de quatro juízes sobre 200 itens a distinção importa.
+
+    Usa a aproximação normal do McNemar: com ψ = proporção de pares discordantes,
+    δ ≈ (z_{α/2} + z_poder) · √(ψ/n). Só os pares discordantes carregam informação,
+    pelo que um desenho com poucos é pouco potente por muitos itens que tenha —
+    exactamente o caso quando dois juízes concordam quase sempre.
+    """
+    if n_pares <= 0 or n_discordantes < 0 or n_discordantes > n_pares:
+        return None
+    psi = n_discordantes / n_pares
+    if psi == 0.0:
+        return {
+            "n_pares": n_pares,
+            "n_discordantes": 0,
+            "proporcao_discordante": 0.0,
+            "efeito_minimo_detectavel": None,
+            "nota": (
+                "Zero pares discordantes: o desenho nao distingue diferenca alguma, "
+                "qualquer que seja o N. Nao e evidencia de equivalencia."
+            ),
+        }
+    z_alpha = _z_quantil(1.0 - alpha / 2.0)
+    z_poder = _z_quantil(poder)
+    delta = (z_alpha + z_poder) * math.sqrt(psi / n_pares)
+    return {
+        "n_pares": n_pares,
+        "n_discordantes": n_discordantes,
+        "proporcao_discordante": round(psi, 4),
+        "alpha": alpha,
+        "poder": poder,
+        "efeito_minimo_detectavel": round(delta, 4),
+        "nota": (
+            "Diferenca de taxas abaixo deste valor nao seria distinguivel de ruido "
+            "neste desenho. Um p nao significativo acima deste limiar e informativo; "
+            "abaixo dele, o teste apenas nao tinha poder."
+        ),
+    }
