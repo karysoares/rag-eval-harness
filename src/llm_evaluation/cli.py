@@ -112,6 +112,22 @@ def main() -> None:
         help=("Reconstrói metrics_report.json a partir de outputs/run_* (sem chamadas à API)"),
     )
     parser.add_argument(
+        "--rescore-lexical",
+        type=Path,
+        metavar="DIR",
+        default=None,
+        help=(
+            "Recalcula as métricas léxicas de uma corrida gravada com o código actual "
+            "(sem API) para predictions.rescored.jsonl e summary.rescored.json"
+        ),
+    )
+    parser.add_argument(
+        "--rescore-idioma",
+        choices=("pt", "en"),
+        default="pt",
+        help="Idioma da normalização usada por --rescore-lexical (default: pt)",
+    )
+    parser.add_argument(
         "--experimental",
         action="store_true",
         help="Permite orquestração multiplo (crítico LLM extra; não usar em produção)",
@@ -205,6 +221,21 @@ def main() -> None:
             print(f"Não é um diretório: {run_dir}", file=sys.stderr)
             raise SystemExit(2)
         _write_judge_report(run_dir, samples_path=args.judge_samples)
+        return
+
+    if args.rescore_lexical is not None:
+        run_dir = args.rescore_lexical.expanduser().resolve()
+        if not run_dir.is_dir():
+            print(f"Não é um diretório: {run_dir}", file=sys.stderr)
+            raise SystemExit(2)
+        from llm_evaluation.run_rescore import rescore_run_dir
+
+        summary = rescore_run_dir(run_dir, idioma=args.rescore_idioma)
+        rean = summary.get("reanalise") or {}
+        print(f"Reavaliado: {run_dir / 'summary.rescored.json'}")
+        print(f"  itens alterados: {rean.get('n_itens_alterados')} de {rean.get('n_itens')}")
+        print(f"  antes:  {rean.get('agregados_antes')}")
+        print(f"  depois: {rean.get('agregados_depois')}")
         return
 
     if args.analyze_run is not None:

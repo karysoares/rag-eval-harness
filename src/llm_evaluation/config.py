@@ -577,7 +577,12 @@ def load_config(path: Path) -> AppConfig:
             enabled=lx_enabled,
             bleu=bool(lx_d.get("bleu", True)),
             rouge_l=bool(lx_d.get("rouge_l", True)),
-            meteor=bool(lx_d.get("meteor", True)),
+            # Omissão = desligado: o METEOR precisa do corpus `wordnet` do NLTK, que
+            # não vem com as dependências. Ligado por omissão, um `uv sync` limpo
+            # produzia uma média sobre os pares quase idênticos e publicava-a ao lado
+            # do N total. Quem o queira tem de o pedir, e `validate_protocol` verifica
+            # o recurso antes da primeira chamada.
+            meteor=bool(lx_d.get("meteor", False)),
             levenshtein=bool(lx_d.get("levenshtein", True)),
             token_f1=token_f1,
             reference_mode=cast("LexicalReferenceMode", ref_mode),

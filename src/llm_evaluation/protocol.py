@@ -114,6 +114,18 @@ def validate_protocol(cfg: AppConfig, items: list[EvalItem]) -> None:
             "não há KPI principal de referência textual."
         )
 
+    if cfg.lexical_metrics.enabled and cfg.lexical_metrics.meteor:
+        from llm_evaluation.lexical_metrics import wordnet_disponivel
+
+        if not wordnet_disponivel():
+            problems.append(
+                "metricas_lexicas.meteor=true mas o corpus 'wordnet' do NLTK não está "
+                "instalado. Sem ele o METEOR só pontua pares quase idênticos, logo a "
+                "média sairia calculada sobre o subconjunto mais fácil e enviesada para "
+                "cima. Instale-o (python -m nltk.downloader wordnet omw-1.4) ou ponha "
+                "metricas_lexicas.meteor: false."
+            )
+
     if problems:
         msg = "Protocolo de avaliação inválido:\n- " + "\n- ".join(problems)
         raise ValueError(msg)

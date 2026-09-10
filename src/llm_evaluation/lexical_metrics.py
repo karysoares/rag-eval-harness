@@ -100,6 +100,27 @@ def _levenshtein_similarity(a: str, b: str) -> float:
     return max(0.0, 1.0 - dist / denom)
 
 
+def wordnet_disponivel() -> bool:
+    """Diz se o METEOR consegue produzir um valor por outra via que não o casamento exacto.
+
+    Sem o corpus `wordnet` do NLTK — que o `uv sync` não instala — o METEOR só pontua
+    pares quase idênticos, isto é, os itens fáceis, e a média sai enviesada para cima
+    por construção. Existe para que `validate_protocol` possa recusar `meteor: true`
+    antes da primeira chamada paga, em vez de o descobrir no sumário.
+    """
+    try:
+        from nltk.corpus import wordnet
+    except ImportError:
+        return False
+    try:
+        wordnet.ensure_loaded()
+    except LookupError:
+        return False
+    except Exception:  # noqa: BLE001 — indisponível é indisponível, qualquer que seja a causa
+        return False
+    return True
+
+
 def _meteor_score_optional(reference: str, hypothesis: str) -> tuple[float | None, str | None]:
     """METEOR via NLTK; devolve ``(valor, motivo_da_ausência)``.
 

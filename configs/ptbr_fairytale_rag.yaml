@@ -79,7 +79,12 @@ metricas_lexicas:
   f1_token: true
   bleu: true
   rouge_l: true
-  meteor: true
+  # Desligado por omissão: o METEOR precisa do corpus `wordnet` do NLTK, que o
+  # `uv sync` não instala. Sem ele só pontua pares quase idênticos, pelo que a
+  # média sairia sobre o subconjunto mais fácil. Para o ligar:
+  #   python -m nltk.downloader wordnet omw-1.4
+  # `validate_protocol` recusa `meteor: true` sem o recurso, antes de gastar chamadas.
+  meteor: false
   levenshtein: true
   modo_referencia: max_rouge_l
 

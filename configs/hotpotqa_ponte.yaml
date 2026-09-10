@@ -102,6 +102,11 @@ metricas_lexicas:
   meteor: false
   levenshtein: true
   modo_referencia: primeiro   # o HotpotQA tem uma resposta ouro por item
+  # Corpus inglês: reproduz o protocolo oficial do SQuAD byte a byte (remove
+  # a|an|the, colapsa pontuação). O default `pt` existe para o caso de
+  # referência português e enviesaria estes números — `state-of-the-art`
+  # separa-se em três tokens em vez de um.
+  idioma: en
 
 patterns:
   referencia_forte:
