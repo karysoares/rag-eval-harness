@@ -6,23 +6,118 @@ Alterações relevantes do projeto, no formato [Keep a Changelog](https://keepac
 
 ### Added
 
-- Portuguese-aware lexical normalisation (`metricas_lexicas.idioma`, default `pt`). The ROUGE tokenizer is now Unicode-aware — the previous ASCII one split every accented word (`informação` → `informa`, `o`) — and token normalisation separates on hyphens instead of gluing enclisis and compounds (`deu-lhe` → `deu lhe`), while removing Portuguese articles symmetrically in gender and number. `idioma: en` reproduces the official SQuAD protocol byte for byte, so published English results stay comparable. Measured over the four recorded runs, aggregate F1 and ROUGE-L move by less than 0.01; per item, 131 of 200 change and 18 move by more than 0.10.
-- Per-metric denominators in `sumario_lexical` (`n_por_metrica`), plus `meteor_indisponivel` counting why METEOR produced no value. Without the NLTK `wordnet` corpus, METEOR only returns a score on near-exact matches, so its mean was computed over the easiest 2% of items and published next to `n_itens_pontuados`, reading as full coverage.
-- `idioma_normalizacao` recorded in `sumario_lexical`, so the active variety is part of the artifact.
-
-### Fixed
-
-- `audit_run.py --strict` no longer fails a run over items that never produced metrics because execution failed (quota, network, provider 4xx). Those items are excluded from the metric checks and reported as a separate note with the error types, in line with the rule that an execution failure is not a property of the system under evaluation.
-- Credential redaction now covers query-string authentication (`?api-key=`, `?key=`, `?access_token=`) and vendor key prefixes beyond `sk-` (`gsk_`, `ghp_`, `glpat-`, `hf_`, `xai-`). Provider error messages reach `meta.processing_error` in the published `predictions.jsonl`, and these forms passed through verbatim. The parameter name survives redaction so the message still says which credential failed.
-- Provider HTTP errors record only `scheme://host` instead of the full request URL, matching how endpoints are recorded elsewhere in the artifacts.
+- `docs/evidencia/` is versioned. The README's headline table linked
+  `docs/evidencia/judge_ab_fairytale_200.json` for its aggregates, and that directory had
+  never been committed — a 404 for anyone cloning the repository, breaking invariant 5 and
+  invariant 7 at once on the project's central claim. `publish_run_evidence.py` now writes
+  there instead of the equally gitignored `assets/evidencia/`: one publication path, versioned.
+- `llm-eval --rescore-lexical DIR`: recomputes `meta.metricas_lexicas` from the recorded
+  answer and references with the current code, then re-aggregates — no API calls. The
+  Portuguese normalisation had landed in code but in no evidence: all four recorded runs
+  predate it, so every published F1 and ROUGE-L came from the ASCII tokenizer, and the
+  judge's accuracy and kappa are computed against that F1. Writes alongside the originals
+  (`predictions.rescored.jsonl`, `summary.rescored.json`) with a `reanalise` block, because a
+  rescored run is a re-analysis and not the same result. The metric set is inferred from the
+  artifact, since three of the four runs point at a `configs/_tmp_*.yaml` that no longer exists.
+- Bootstrap confidence intervals for Cohen's kappa (`bootstrap_kappa_ci`) and ECE
+  (`bootstrap_ece_ci`), wired into `judge_report.json` and both READMEs. These were the two
+  columns the judge ranking was argued on and the only ones published without an interval.
+  With them the table reads differently: two of four judges have a kappa interval containing
+  zero, and the two positive intervals overlap, so no judge is demonstrably more
+  discriminative than another at N=200.
+- Holm-Bonferroni correction across `pairwise_paired_significance`. Four arms produce six
+  simultaneous comparisons, where the chance of at least one false positive approaches 26%.
+  Both p-values stay in the artifact, and the adjusted values are not rounded — rounding to
+  six decimals turned the ablation's 1.6e-14 into 0.0.
+- `efeito_minimo_detectavel` on every paired comparison (`mcnemar_mde`). "All pairs p=1" read
+  alone invites the stronger claim that the judges are equivalent; the MDE is the difference
+  between that and "this design distinguished nothing". Zero discordant pairs yields no MDE
+  and says so, rather than implying equivalence.
+- `protocolo_sha256` in the provenance block. `config_hash_sha256` did not identify a run:
+  two A/B arms shared `2bd0b59d` because models come from the environment and not the YAML,
+  putting the experiment's independent variable outside the reproducibility hash.
+  `config_hash` is untouched, so `--resume` keeps working.
+- A CI `evaluation` job that runs the full pipeline offline, writes real artifacts through the
+  CLI's own code path, audits them with `--strict`, and gates the KPIs against a versioned
+  golden (`tests/fixtures/ci_kpi_golden.json`, tolerance 1e-6, regenerate with
+  `LLM_EVAL_REGENERAR_GOLDEN=1`). CI previously audited a one-line fixture whose reference type
+  is `answer_lists` with every layer off, so the auditor's `lexical` branches — the reference
+  case's own — were never exercised, and no step produced a `summary.json` to audit.
+- `scripts/bench_concurrency.py` and `docs/evidencia/bench_concorrencia.json`: the concurrency
+  speedup and embedding cache hit rate had no script, no test and no artifact. Measured
+  18.95/4.76/2.56 s (1.0x/3.98x/7.40x) and 84.7% (508 hits, 92 misses).
+- `docs/evidencia/embedding_sweep_fairytale_200.json`: the FP/FN curve for
+  `embedding_min_cosine` that `docs/calibracao_embedding.md` had promised since v0.4.1. It
+  shows there is no optimum — recall stays between 1% and 16% across 0.10-0.50, because cosine
+  grounding and lexical overlap are near-independent signals.
+- `tests/test_dashboard_render.py` drives the dashboard's render functions against real
+  artifacts through a Streamlit double, and `dashboard/app.py` is no longer omitted from
+  coverage: 1160 lines of delivered surface were outside the denominator, which is how the 80%
+  gate passed while no render function ran in any test.
+- Per-metric denominators in `sumario_lexical` (`n_por_metrica`), `meteor_indisponivel`, and
+  `idioma_normalizacao`.
+- A `Makefile` for the documented flows and a 3.11/3.12/3.13 CI matrix.
 
 ### Changed
 
-- The judge A/B table in both READMEs now states which generator each arm used. The three API arms share `gpt-4o-mini`; the local arm generated with `llama3.2`, which confounds judge with generator in that row, and the text no longer claims the local judge discriminates better.
+- **METEOR is off by default**, in the configs and in the code default, and
+  `validate_protocol` refuses `meteor: true` when the NLTK `wordnet` corpus is missing — which
+  `uv sync` does not install. Without it METEOR only scores near-identical pairs, so a clean
+  install computed the mean over the easiest 2% of items and published it beside the full N.
+  Failing before the first paid call is the point; disclosure after 200 calls is not enough.
+- `configs/hotpotqa_ponte.yaml` sets `idioma: en`. It is an English corpus being normalised
+  with the Portuguese rules, so the byte-for-byte SQuAD comparability that the `en` value
+  exists to provide was unreachable from any shipped config — a regression introduced by the
+  Portuguese fix itself. A test walks every config and asserts the language matches the corpus.
+- The Portuguese prompts are written in the variety they declare. All of them opened with
+  "português do Brasil" in pre-1990 European orthography (78 occurrences): an uncontrolled
+  variable in the layer whose kappa is published.
+- Both READMEs lead with the method and name the Portuguese case as a worked example, stating
+  what it excludes: no pt-PT corpus, no adult domain, and no handling of the pt-PT/pt-BR
+  orthographic split, so a correct pt-PT answer scores lower against a pt-BR gold.
+- The judge A/B evidence file declares both confounds per arm — the local arm's different
+  generator, and the `gpt-4o-mini` arm where the judge is the generator — and no longer
+  asserts the conclusion both READMEs had withdrawn.
+- `assets/benchmarks/comparatives.json` (schema 1.2): every entry carries
+  `proveniencia.artefactos_presentes`. All seven are false, which is the truth — the runs
+  behind them no longer exist. METEOR is published only with its own denominator, and the
+  "evolution" entry is relabelled history rather than comparison, since it varied YAML,
+  embedding calibration and generation parameters at once.
+- `scripts/ablacao_recuperacao.py --reagregar` recomputes the ablation summary offline from
+  recorded predictions. The stored artifact ran McNemar on the naive judge-approval KPI that
+  SPEC-013 exists to refute (p=0.754/0.065/0.180 where the product metric gives p=1.6e-14), so
+  the reproduction path contradicted the publication.
+- `scripts/sweep_embedding_threshold.py` reads the reference via `referencia_incorreta`. It
+  skipped every item without a boolean `gold_correct`, i.e. it returned a table of zeros on
+  every lexical config — on the entire reference corpus.
+- `docs/calibracao_embedding.md` states the shipped thresholds (0.24, 0.26 in `tuned`) instead
+  of 0.28, with the measured curve and why the value is a conservative floor.
+
+### Fixed
+
+- Credential redaction covers header-form credentials (`x-api-key: <value>`) and keys with no
+  vendor prefix (Google `AIza…`, AWS `AKIA…`, Slack `xox[bpsare]-…`). The query-string pattern
+  required `?` or `&`, and the header form is what a provider response body contains when it
+  echoes the headers it received — the incident behind invariant 1.
+- Four `meta` writers now pass through `redact_secrets`: the responder's and critic's
+  `structured_output_error`, the lexical metrics error, and the RAGAS adapter. Only
+  `pipeline._failed_record` did.
+- `audit_run.py --strict` no longer fails a run over items that never produced metrics because
+  execution failed.
+- The file-lock test collects worker exceptions instead of failing with an `IndexError` that
+  pointed at the ordering logic when a lock timeout was the actual cause.
+
+---
+
+### Ciclo anterior, ainda não lançado
+
+Entradas acumuladas desde a v1.0.0, antes do trabalho acima.
+
+#### Added
 
 - Estatística emparelhada para comparar corridas sobre os mesmos itens: teste de McNemar (exato ou χ² com correção de continuidade) e IC bootstrap emparelhado (`statistics.mcnemar_test`, `statistics.paired_bootstrap_diff_ci`). `--compare-runs` alinha por `id_item` e emite `significancia_emparelhada`; `run_comparison.json` passa a `versao_esquema: "2"`.
-- Concorrência de itens em `run_batch` via `llm.concurrency` no YAML ou `LLM_EVAL_CONCURRENCY` (padrão 1). Medido: 4,0× com 4 workers, 7,3× com 8 (mock de 150 ms/chamada, 60 itens).
-- `retrieval.CachingEmbedder`: memoriza embeddings por texto entre itens e entre recuperação e verificação (84,8% de acerto no cenário acima).
+- Concorrência de itens em `run_batch` via `llm.concurrency` no YAML ou `LLM_EVAL_CONCURRENCY` (padrão 1). Medido com `scripts/bench_concurrency.py`: 3,98× com 4 workers, 7,40× com 8 (mock de 150 ms/chamada, 60 itens sobre 10 documentos).
+- `retrieval.CachingEmbedder`: memoriza embeddings por texto entre itens e entre recuperação e verificação (84,7% de acerto no cenário acima: 508 acertos, 92 faltas).
 - Documentação técnica publicada no repositório: `docs/ARCHITECTURE.md`, `docs/specs/`, `docs/decisions/`, `docs/techniques/`, `docs/metrics.md` (notas internas continuam locais).
 - Secções `Performance` e `Statistical methods` no `README.md`.
 - Evidência gravada do A/B de juízes em `docs/evidencia/judge_ab_fairytale_200.json` e o config que a reproduz (`configs/ptbr_fairytale_judge_ab.yaml`): quatro juízes sobre os mesmos 200 itens, com uso de tokens por modelo, testes emparelhados e limitações declaradas.
@@ -40,13 +135,13 @@ Alterações relevantes do projeto, no formato [Keep a Changelog](https://keepac
 - Telemetria externa ([SPEC-011](docs/specs/011-telemetry.md)): traces e métricas por item e por corrida para Arize Phoenix, LangSmith, qualquer coletor OTLP (incl. ADOT → CloudWatch), métricas CloudWatch em EMF, e um destino `jsonl` local sem dependências. Ativa-se com `LLM_EVAL_TELEMETRY`; extra `observability` só para os destinos OTLP. Fecha a Fase 8 da SPEC-003.
   Invariantes garantidos por teste: artefactos idênticos com e sem telemetria, exportador que rebenta não derruba a corrida, e conteúdo (pergunta/resposta) não é exportado sem `LLM_EVAL_TELEMETRY_CONTENT=1`.
 
-### Changed
+#### Changed
 
 - `OpenAiCompatibleClient` reutiliza um `httpx.Client` com pool keep-alive em vez de criar um por chamada; backoff de retry passa a ter jitter.
 - `UsageAccumulator` e `OpenAiCompatibleClient.last_usage` passam a armazenamento thread-local, para que `meta.observabilidade` continue correto por item com workers concorrentes.
 - `Retriever.retrieve` deixa de embeber a pergunta duas vezes no caminho de remoção do chunk ouro.
 
-### Fixed
+#### Fixed
 
 - Custo por modelo: um par único de preços aplicado a gerador e juiz distintos errou por **9,7×** numa corrida gravada ($0,17 reportado contra $1,69 real). `meta.observabilidade` reparte tokens por modelo e `LLM_EVAL_PRICES` dá custo por modelo; modelos sem preço são listados em vez de desaparecerem do total. O parser passa a separar pela direita, para aceitar etiquetas do Ollama (`qwen2.5:7b`).
 - Falhas de execução deixam de contaminar a estatística emparelhada. `_failed_record` marca `flag_anomalia` para revisão, o que fazia uma corrida com 9 falhas de quota aparecer com anomalias "exclusivas": o McNemar dava p=0,004 a medir propagação de faturação. Excluídas, todos os pares dão p=1.
