@@ -49,6 +49,22 @@ Sinónimos PT aceites: `devolver_cadeia_pensamento_juiz`, `max_chars_contexto_ju
 > `prompts/` da raiz é um espelho para edição local, ignorado pelo git.
 > O estilo `rag_en` foi removido; `generic` é o substituto agnóstico de domínio.
 
+**Lacuna conhecida: não há prompt neutro de domínio em português.** Os estilos `pt` e
+`rag_pt` são portugueses mas específicos de narrativa — o `rag_pt` nomeia «contos,
+histórias infantis, fairytale» e o `responder_system.txt` diz «histórias e contos
+infantis». O `generic`, que é o único neutro quanto ao domínio, está escrito em inglês
+e declara explicitamente que nunca nomeia «a language of the source material». Na
+prática, hoje escolhe-se **português ou agnosticismo de domínio, nunca os dois**.
+
+Correr outro corpus português exige portanto um de dois compromissos: `rag_pt`, que diz
+ao juiz que avalia contos infantis; ou `generic`, que faz o juiz raciocinar em inglês
+sobre texto português — uma variável escondida na camada cujo κ se publica.
+
+Um estilo `generic_pt` fecharia a lacuna, mas um prompt de juiz sem corrida gravada que
+o caracterize é um botão de YAML sem evidência, e a
+[`PREMISSAS.md`](../PREMISSAS.md) desaconselha exactamente isso. A precedência é:
+caracterizar primeiro (ECE, κ, viés), publicar depois.
+
 Placeholders: `{question}`, `{context}`, `{answer}`. Rubrica RAG EN (v1): grounding vs recusa honesta; resposta curta factual não deve ser `sustentado` se contradiz o contexto.
 
 ### Saída por item (`predictions.jsonl`)
