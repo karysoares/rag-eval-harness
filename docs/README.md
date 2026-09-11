@@ -15,6 +15,7 @@ Documentação técnica do harness de avaliação de sistemas de linguagem com r
 7. [`references.md`](references.md) — mapa técnica ↔ literatura.
 8. [`SECURITY.md`](../SECURITY.md) — segredos e artefatos.
 9. Fichas em [`techniques/`](techniques/) — aprofundamento por tema (ordem livre; começar por RAG + juiz LLM).
+10. [`VEREDITO_DEFENSABILIDADE.md`](VEREDITO_DEFENSABILIDADE.md) — inventário do que é sustentável na revisão e do que não é, com as lacunas abertas nomeadas. Ler antes de citar qualquer número deste repositório.
 
 ## Ficheiros de apoio
 

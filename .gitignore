@@ -48,6 +48,9 @@ docs/*
 !docs/glossary.md
 !docs/references.md
 !docs/calibracao_embedding.md
+# Veredito de defensabilidade: o inventário do que é e não é sustentável na
+# revisão. Publicado de propósito — omitir as lacunas é que custaria credibilidade.
+!docs/VEREDITO_DEFENSABILIDADE.md
 !docs/decisions/
 !docs/specs/
 !docs/techniques/

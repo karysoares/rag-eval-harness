@@ -364,6 +364,7 @@ Resultados agregados versionados em [`assets/benchmarks/comparatives.json`](asse
 | [`CONTRIBUTING.md`](CONTRIBUTING.md) | Ambiente, testes e PRs |
 | [`CHANGELOG.md`](CHANGELOG.md) | Histórico de versões |
 | [`assets/benchmarks/README.md`](assets/benchmarks/README.md) | Comparativos e regeneração |
+| [`docs/VEREDITO_DEFENSABILIDADE.md`](docs/VEREDITO_DEFENSABILIDADE.md) | **O que este repositório sustenta em revisão e o que não sustenta**, com as lacunas abertas nomeadas |
 
 ## Related projects
 

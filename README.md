@@ -359,6 +359,8 @@ Aggregate results are versioned in [`assets/benchmarks/comparatives.json`](asset
 | [`CHANGELOG.md`](CHANGELOG.md) | Version history |
 | [`assets/benchmarks/README.md`](assets/benchmarks/README.md) | Comparatives and regeneration |
 
+**What this repository can and cannot defend:** [`docs/VEREDITO_DEFENSABILIDADE.md`](docs/VEREDITO_DEFENSABILIDADE.md) — an inventory of every published claim that survives review, and the gaps that remain open. Read it before citing any number from here.
+
 Note: the documents under `docs/` are written in Portuguese, matching the corpus and prompts.
 
 ## Related projects
