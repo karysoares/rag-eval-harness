@@ -20,21 +20,28 @@ Recuperação, geração, grounding, juiz LLM com calibração e sondas de viés
 
 A maioria das ferramentas de avaliação RAG pontua a resposta. Esta também pontua **quem está a pontuar** — porque um juiz LLM é um instrumento, e um instrumento que ninguém caracterizou produz números sobre os quais ninguém devia decidir.
 
-Quatro juízes sobre os mesmos 200 itens, medidos com o próprio harness. κ e ECE levam intervalos bootstrap, porque são as colunas sobre as quais a escolha de um juiz se argumentaria:
+Juízes medidos com o próprio harness, sobre o caso de referência FairytaleQA pt-BR. Só se comparam braços em que **o juiz difere do gerador** — um modelo a corrigir o seu próprio trabalho não é uma comparação de juízes, e um braço que mudou duas variáveis também não. κ e ECE levam intervalos bootstrap, porque são as colunas sobre as quais a escolha de um juiz se argumentaria:
 
-| juiz | exatidão | κ (IC 95%) | ECE (IC 95%) | confiança média | s/item |
-|---|---|---|---|---|---|
-| `gpt-4o` | 0,561 | −0,028 [−0,081, +0,020] | 0,421 [0,351, 0,493] | 0,982 | 11,7 |
-| `gpt-4o-mini` ‡ | 0,575 | −0,006 [−0,046, +0,032] | 0,399 [0,332, 0,465] | 0,974 | 3,0 |
-| `gpt-5.4-nano` | **0,610** | 0,092 [+0,004, +0,183] | **0,296** [0,234, 0,360] | 0,906 | **2,5** |
-| `qwen2.5` (local, gratuito) † | 0,585 | 0,190 [+0,074, +0,308] | 0,366 [0,298, 0,434] | 0,911 | 33,7 |
+| juiz | gerador | n | exatidão | κ (IC 95%) | ECE (IC 95%) | conf. média | s/item |
+|---|---|---|---|---|---|---|---|
+| `gpt-4o` | `gpt-4o-mini` | 189 | 0,545 | −0,006 [−0,054, +0,043] | 0,437 [0,370, 0,510] | 0,982 | 11,7 |
+| `gpt-5.4-nano` | `gpt-4o-mini` | 200 | **0,595** | 0,084 [−0,000, +0,172] | **0,311** [0,248, 0,374] | 0,906 | **2,5** |
+| `qwen2.5` (local, gratuito) | `gpt-4o-mini` | 93 ‡ | 0,667 | 0,292 [+0,084, +0,469] | 0,276 [0,187, 0,378] | 0,921 | ~24 |
 
-Três coisas que os intervalos dizem e as estimativas pontuais escondiam. Dois dos quatro juízes têm intervalo de κ a conter zero — nesta referência não concordam com ela além do acaso. Os outros dois sobrepõem-se entre si, pelo que **nenhum juiz aqui é demonstravelmente mais discriminativo do que outro** com N=200. E todos declaram confiança de 0,91–0,98 acertando 56–61%, portanto nenhum serve para triagem por confiança. O mais caro é último em exatidão, calibração e velocidade.
+Três resultados, e são os intervalos que os tornam dizíveis. **Nenhum braço de N completo concorda com a referência além do acaso** — os dois intervalos de κ contêm zero, logo com 200 itens estes juízes e a referência léxica são sinais independentes e não um a validar o outro. **Todos os juízes são sobreconfiantes**: 0,91–0,98 de confiança declarada contra 0,55–0,67 de exatidão, pelo que `confianca` não serve de triagem. E **o modelo caro é o pior** em exatidão, calibração e latência ao mesmo tempo — o `gpt-4o` fica último nas três e custa 9,3× o `gpt-4o-mini`.
 
-É esse o ponto do exercício: a ordenação que uma tabela ingénua convidaria a fazer não se sustenta, e é preciso um intervalo para o ver. [Ver como é medido](#meta-avaliação-do-juiz).
+‡ O braço local é uma corrida **parcial**: os créditos da API esgotaram-se ao item 94, pelo que cobre 93 de 200 como prefixo da ordem do dataset e não como amostra aleatória — no FairytaleQA, onde os itens se agrupam por história, um prefixo cobre menos histórias distintas. É o único braço cujo intervalo de κ exclui zero, o que é sugestivo e não estabelecido. [`docs/evidencia/judge_local_gerador_partilhado_93.json`](docs/evidencia/judge_local_gerador_partilhado_93.json).
 
-† O braço local correu com gerador local (`llama3.2`) além do juiz local, pelo que esta linha varia juiz e gerador ao mesmo tempo. Uma repetição parcial com o gerador `gpt-4o-mini` partilhado ([`docs/evidencia/judge_local_gerador_partilhado_93.json`](docs/evidencia/judge_local_gerador_partilhado_93.json), 93 de 200 itens — os créditos da API esgotaram-se ao item 94) mostra as duas coisas ao mesmo tempo: o gerador explicava boa parte da diferença (o F1 médio nos mesmos itens sobe de 0,282 para 0,357), **e** o juiz local mantém o κ mais alto com o gerador controlado (0,244, o único braço cujo intervalo exclui zero nesse subconjunto). Não está resolvido — os intervalos continuam a sobrepor-se ao do `gpt-5.4-nano`, e os 93 itens são um prefixo da ordem do dataset e não uma amostra aleatória, o que no FairytaleQA significa menos histórias distintas. A tabela acima mantém-se como a comparação dos três braços de API sobre os 200 itens.
-‡ Auto-avaliação: aqui o juiz é o modelo que produziu a resposta (`protocolo_ativo.models.judge_same_as_generator`). Um modelo a corrigir o seu próprio trabalho tende a preferi-lo, pelo que esta linha também não é comparável de forma limpa com as restantes.
+Todos os valores são re-derivados através da normalização léxica portuguesa actual (`llm-eval --rescore-lexical`), e é por isso que diferem dos números publicados antes — a exatidão e o κ dependem da referência léxica, e o tokenizador anterior partia toda a palavra acentuada. [Ver como é medido](#meta-avaliação-do-juiz).
+
+### Dois braços que não sustentam uma comparação de juízes
+
+Ambos foram corridos, ambos estão gravados, e nenhum entra na tabela acima. Nomeá-los é o ponto: o que invalida uma comparação faz parte do resultado.
+
+| braço | porque está excluído |
+|---|---|
+| `gpt-4o-mini` a julgar `gpt-4o-mini` | **Auto-avaliação.** O juiz é o modelo que produziu a resposta (`protocolo_ativo.models.judge_same_as_generator`), e um modelo a corrigir o seu próprio trabalho tende a preferi-lo. A sua taxa de aprovação de 0,780 não é comparável com um braço julgado por outra família. |
+| `qwen2.5` a julgar `llama3.2` | **Duas variáveis ao mesmo tempo.** Variou juiz *e* gerador, pelo que o seu κ de 0,229 era igualmente compatível com um gerador mais fraco a produzir respostas mais fracas. A repetição parcial acima separa-as: o F1 médio nos mesmos itens sobe de 0,282 para 0,357 com o gerador partilhado, logo o gerador explicava boa parte da diferença. |
 
 Por baixo está um harness **agnóstico ao corpus**: cada dataset é um adaptador; o núcleo mede recuperação, geração e verificação em camadas independentes. O caso de referência incluído é **FairytaleQA pt-BR** ([`benjleite/FairytaleQA-translated-ptBR`](https://huggingface.co/datasets/benjleite/FairytaleQA-translated-ptBR)).
 
@@ -212,20 +219,21 @@ uv run llm-eval --judge-report outputs/run_<id>
 
 Presets para Ollama, vLLM, DeepSeek, DashScope e OpenRouter em [`.env.example`](.env.example).
 
-**Escolha o juiz com o harness, não por intuição.** Quatro juízes sobre os mesmos 200 itens (`configs/ptbr_fairytale_judge_ab.yaml`, emparelhados por `id_item`). Os três braços de API partilham o gerador `gpt-4o-mini`; o braço local gerou com `llama3.2` no mesmo endpoint local, o que confunde juiz com gerador nessa linha:
+**Escolha o juiz com o harness, não por intuição.** Cinco braços sobre os mesmos 200 itens (`configs/ptbr_fairytale_judge_ab.yaml`, emparelhados por `id_item`), dos quais três são comparações de juiz válidas. Todos os valores re-derivados com a normalização léxica actual.
 
-| juiz | n | exatidão | κ (IC 95%) | ECE (IC 95%) | conf. média | `sustentado` | s/item |
-|---|---|---|---|---|---|---|---|
-| `gpt-4o` | 189 | 0,561 | −0,028 [−0,081, +0,020] | 0,421 [0,351, 0,493] | 0,982 | 86,2% | 11,7 |
-| `gpt-4o-mini` ‡ | 200 | 0,575 | −0,006 [−0,046, +0,032] | 0,399 [0,332, 0,465] | 0,974 | 78,0% | 3,0 |
-| **`gpt-5.4-nano`** | 200 | **0,610** | 0,092 [+0,004, +0,183] | **0,296** [0,234, 0,360] | 0,906 | 76,5% | **2,5** |
-| `qwen2.5` (Ollama) † | 200 | 0,585 | 0,190 [+0,074, +0,308] | 0,366 [0,298, 0,434] | 0,911 | 59,5% | 33,7 |
+| juiz | gerador | n | exatidão | κ (IC 95%) | ECE (IC 95%) | conf. média | `sustentado` | s/item | válido? |
+|---|---|---|---|---|---|---|---|---|---|
+| `gpt-4o` | `gpt-4o-mini` | 189 | 0,545 | −0,006 [−0,054, +0,043] | 0,437 [0,370, 0,510] | 0,982 | 86,2% | 11,7 | sim |
+| `gpt-5.4-nano` | `gpt-4o-mini` | 200 | **0,595** | 0,084 [−0,000, +0,172] | **0,311** [0,248, 0,374] | 0,906 | 76,5% | **2,5** | sim |
+| `qwen2.5` (Ollama) | `gpt-4o-mini` | 93 | 0,667 | 0,292 [+0,084, +0,469] | 0,276 [0,187, 0,378] | 0,921 | 62,4% | ~24 | parcial |
+| `gpt-4o-mini` | `gpt-4o-mini` | 200 | 0,545 | −0,008 [−0,049, +0,028] | 0,428 [0,361, 0,493] | 0,974 | 78,0% | 3,0 | **não** — auto-avaliação |
+| `qwen2.5` (Ollama) | `llama3.2` | 200 | 0,610 | 0,229 [+0,111, +0,348] | 0,342 [0,275, 0,406] | 0,911 | 59,5% | 33,7 | **não** — juiz e gerador variaram |
 
-Os intervalos são bootstrap sobre itens (`bootstrap_kappa_ci`, `bootstrap_ece_ci`) e mudam a leitura da tabela: `gpt-4o` e `gpt-4o-mini` têm intervalos de κ a atravessar zero, e os dois intervalos positivos sobrepõem-se, pelo que a ordenação aparente por κ não se sustenta com este N. Só a diferença de ECE entre `gpt-5.4-nano` e `gpt-4o` está perto de ser resolúvel.
+Os intervalos são bootstrap sobre itens (`bootstrap_kappa_ci`, `bootstrap_ece_ci`). Os dois braços válidos de N completo têm intervalo de κ a atravessar zero: a ordenação aparente por κ não se sustenta com este N, e só o braço local parcial exclui zero. Nenhum par difere significativamente na taxa de alerta (todos p=1 depois de excluir falhas de execução, com ajuste de Holm nas comparações simultâneas — os braços formam uma família, não testes independentes). As colunas leem-se em separado: exatidão e κ são medidos contra uma referência *léxica*, que faz uma pergunta diferente da do juiz, por isso κ perto de zero significa que os dois sinais são independentes e não que o juiz erra. A calibração é a coluna inequívoca — todos declaram 0,91–0,98 de confiança acertando 55–67%, portanto `confianca` não serve de limiar de triagem.
 
-Nenhum par difere significativamente na taxa de alerta (todos p=1 depois de excluir falhas de execução, e com ajuste de Holm nas seis comparações simultâneas — quatro braços formam uma família, não seis testes independentes). As colunas leem-se em separado: exatidão e κ são medidos contra uma referência *léxica*, que faz uma pergunta diferente da do juiz, por isso κ perto de zero significa que os dois sinais são independentes e não que o juiz erra. A calibração é inequívoca — todos declaram confiança de 0,91–0,98 acertando 56–61%, portanto `confianca` não serve de limiar de triagem.
+O modelo caro não é o bom: o `gpt-4o` fica último em exatidão, calibração e latência, a 9,3× o preço do `gpt-4o-mini`, e essa comparação é limpa — partilha o gerador e vem de outra família que ele.
 
-O modelo caro não é o bom: o `gpt-4o` fica último em todas as colunas e custa 9,3× o `gpt-4o-mini`. ‡ Essa comparação é *quase* limpa — os dois braços partilham o gerador, mas no braço `gpt-4o-mini` o juiz **é** o gerador, logo é auto-avaliação, e um modelo a corrigir o seu próprio trabalho tende a preferi-lo. † O braço local mudou duas variáveis ao mesmo tempo (juiz **e** gerador). Uma repetição parcial com o gerador partilhado (93 de 200 itens, créditos esgotados) separa-as: o gerador explicava boa parte da diferença, e o juiz local continuou com o κ mais alto depois disso. Sugestivo, não resolvido — ver a nota na Overview e [`docs/evidencia/judge_local_gerador_partilhado_93.json`](docs/evidencia/judge_local_gerador_partilhado_93.json).
+Os dois braços inválidos ficam na tabela de propósito, marcados. Retirá-los esconderia o que foi realmente corrido; apresentá-los sem marca seria o erro. Ver a Overview para o motivo de cada exclusão.
 
 Agregados completos, com uso de tokens por modelo e os testes emparelhados: [`docs/evidencia/judge_ab_fairytale_200.json`](docs/evidencia/judge_ab_fairytale_200.json).
 

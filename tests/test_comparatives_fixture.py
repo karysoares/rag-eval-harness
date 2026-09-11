@@ -7,25 +7,27 @@ from pathlib import Path
 
 
 def test_comparatives_json_structure() -> None:
+    """Só entram comparativos verificáveis numa clonagem limpa.
+
+    O ficheiro chegou a publicar sete entradas cujas corridas já não existiam. Um
+    número medido mas irreverificável dá a aparência de evidência sem a substância,
+    pelo que a versão 2.0 guarda apenas o que se reproduz, e declara o que saiu.
+    """
     path = Path(__file__).resolve().parents[1] / "assets" / "benchmarks" / "comparatives.json"
     data = json.loads(path.read_text(encoding="utf-8"))
-    assert data.get("schema_version") == "1.2"
-    eixos = data.get("eixos")
-    assert isinstance(eixos, dict)
-    assert set(eixos.keys()) >= {"interno", "externo", "calibracao_p0", "hitl"}
+    assert data.get("schema_version") == "2.0"
+
+    removidos = data.get("removidos")
+    assert isinstance(removidos, dict), "a remoção tem de ficar registada, não silenciosa"
+    assert removidos.get("motivo")
+    assert removidos.get("o_que_saiu")
+
     comp = data.get("comparativos")
-    assert isinstance(comp, dict)
-    assert "interno_fairytale_evolution" in comp
-    assert "referencia_tuned_n1025" in comp
+    assert isinstance(comp, dict) and comp, "ficou sem nenhum comparativo verificável"
     assert "calibracao_p0" in comp
-    assert "hitl_amostra" in comp
-    evolution = comp["interno_fairytale_evolution"]
-    assert len(evolution["corridas"]) == 4
-    tuned = comp["referencia_tuned_n1025"]
-    assert tuned["harness"]["n_itens"] == 1025
-    assert tuned["policy"]["criterio_p0_sugerido"]["passou"] is True
     p0 = comp["calibracao_p0"]
     assert len(p0["casos"]) >= 1
+    assert all(c["run_id"] == "policy_validation_run" for c in p0["casos"])
 
 
 def test_hitl_fixture_sample() -> None:
@@ -45,18 +47,22 @@ def _entradas_com_run_id(comp: dict[str, object]) -> list[tuple[str, dict[str, o
             continue
         if valor.get("run_id") or "proveniencia" in valor:
             out.append((chave, valor))
-        for corrida in valor.get("corridas") or []:
-            if isinstance(corrida, dict):
-                out.append((f"{chave}.{corrida.get('label')}", corrida))
+        # `corridas` e `casos` aninham run_ids: sem os percorrer, uma entrada cujos
+        # números vivem numa lista passava sem verificação de proveniência.
+        for campo in ("corridas", "casos"):
+            for item in valor.get(campo) or []:
+                if isinstance(item, dict) and (item.get("run_id") or "proveniencia" in item):
+                    out.append((f"{chave}.{item.get('label') or item.get('run_id')}", item))
     return out
 
 
 def test_cada_numero_publicado_declara_se_e_reverificavel() -> None:
     """Invariante 5: um número publicado tem de vir de uma corrida gravada.
 
-    Quando os artefactos deixam de existir o número não se apaga — marca-se como não
-    reverificável, para que ninguém o leia como reproduzível. O que não é admissível é
-    publicá-lo sem dizer qual dos dois casos é.
+    Quando os artefactos deixam de existir o número não se apaga nem se mantém como
+    se nada fosse — sai, e a saída fica registada. O que resta tem de apontar para
+    algo que exista **nesta clonagem**: uma fixture versionada serve, um directório
+    em `outputs/` (gitignored) não serve para terceiros.
     """
     root = Path(__file__).resolve().parents[1]
     data = json.loads(
@@ -65,15 +71,12 @@ def test_cada_numero_publicado_declara_se_e_reverificavel() -> None:
     for nome, entrada in _entradas_com_run_id(data["comparativos"]):
         prov = entrada.get("proveniencia")
         assert isinstance(prov, dict), f"{nome} cita uma corrida sem bloco de proveniencia"
-        presente = prov.get("artefactos_presentes")
-        assert isinstance(presente, bool), f"{nome}: artefactos_presentes tem de ser booleano"
-        run_id = prov.get("run_id")
-        if presente:
-            assert (root / "outputs" / str(run_id) / "summary.json").is_file(), (
-                f"{nome} diz que os artefactos existem, mas outputs/{run_id} nao os tem"
-            )
-        else:
-            assert prov.get("motivo"), f"{nome} nao e reverificavel e nao diz porque"
+        assert prov.get("artefactos_presentes") is True, (
+            f"{nome} não é verificável; entradas irreverificáveis saem do ficheiro"
+        )
+        caminho = prov.get("caminho")
+        assert caminho, f"{nome} não diz onde estão os artefactos"
+        assert (root / str(caminho)).exists(), f"{nome} aponta para {caminho}, que não existe"
 
 
 def test_meteor_nao_e_publicado_sem_denominador() -> None:

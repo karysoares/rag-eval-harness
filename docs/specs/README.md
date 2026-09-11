@@ -36,7 +36,7 @@ Cada spec é a **fonte de verdade** do comportamento. Implementação e testes d
 | 011 | [Telemetria](011-telemetry.md) | implemented |
 | 012 | [Avaliação de recuperação](012-retrieval-evaluation.md) | implemented |
 | 013 | [Ponte recuperação → geração](013-retrieval-generation-bridge.md) | implemented |
-| A-NQ | [Adaptador Natural Questions](adapters/natural-questions.md) | implemented |
+| A-NQ | [Adaptador Natural Questions](adapters/natural-questions.md) | **histórico** (nada distribuído: sem adaptador dedicado, sem configs, sem teste) |
 
 ## Mapa de dependências
 

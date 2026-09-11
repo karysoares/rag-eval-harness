@@ -1,6 +1,6 @@
 {
-  "schema_version": "1.2",
-  "gerado_em_utc": "2026-06-06T18:05:02.149268+00:00",
+  "schema_version": "2.0",
+  "gerado_em_utc": "2026-09-11T09:02:06.520943+00:00",
   "nota": "Comparativos versionados; regenerar com scripts/export_comparatives.py. Cada entrada carrega proveniencia.artefactos_presentes: false significa que o numero foi medido mas a corrida que o sustenta ja nao esta no repositorio.",
   "eixos": {
     "interno": {
@@ -34,153 +34,6 @@
     }
   },
   "comparativos": {
-    "interno_fairytale_evolution": {
-      "eixo": "interno",
-      "adaptador": "FairytaleQA-translated-ptBR (hub)",
-      "split": "validation",
-      "n_itens": 1025,
-      "politica_agregacao": "embedding_e_juiz",
-      "corridas": [
-        {
-          "label": "baseline",
-          "run_id": "run_20260517T190713Z",
-          "config": "configs/ptbr_fairytale_full.yaml",
-          "metricas": {
-            "media_rouge_l_f": 0.38,
-            "media_bleu": 0.206,
-            "taxa_juiz_sustentado_diagnostico": 0.796,
-            "taxa_alerta": 0.0
-          },
-          "proveniencia": {
-            "run_id": "run_20260517T190713Z",
-            "artefactos_presentes": false,
-            "motivo": "outputs/run_20260517T190713Z nao esta no repositorio; numero medido mas nao reverificavel"
-          }
-        },
-        {
-          "label": "calibrado",
-          "run_id": "run_20260517T215023Z",
-          "config": "configs/ptbr_fairytale_full.yaml",
-          "metricas": {
-            "media_rouge_l_f": 0.366,
-            "media_bleu": 0.193,
-            "taxa_juiz_sustentado_diagnostico": 0.954,
-            "taxa_alerta": 0.015
-          },
-          "proveniencia": {
-            "run_id": "run_20260517T215023Z",
-            "artefactos_presentes": false,
-            "motivo": "outputs/run_20260517T215023Z nao esta no repositorio; numero medido mas nao reverificavel"
-          }
-        },
-        {
-          "label": "pos_calibracao",
-          "run_id": "run_20260518T074031Z",
-          "config": "configs/ptbr_fairytale_full.yaml",
-          "metricas": {
-            "media_rouge_l_f": 0.367,
-            "media_bleu": 0.191,
-            "taxa_juiz_sustentado_diagnostico": 0.915,
-            "taxa_alerta": 0.007
-          },
-          "proveniencia": {
-            "run_id": "run_20260518T074031Z",
-            "artefactos_presentes": false,
-            "motivo": "outputs/run_20260518T074031Z nao esta no repositorio; numero medido mas nao reverificavel"
-          }
-        },
-        {
-          "label": "tuned",
-          "run_id": "run_20260606T121845Z",
-          "config": "configs/ptbr_fairytale_tuned.yaml",
-          "metricas": {
-            "media_rouge_l_f": 0.349,
-            "media_bleu": 0.175,
-            "taxa_juiz_sustentado_diagnostico": 0.78,
-            "taxa_alerta": 0.0
-          },
-          "proveniencia": {
-            "run_id": "run_20260606T121845Z",
-            "artefactos_presentes": false,
-            "motivo": "outputs/run_20260606T121845Z nao esta no repositorio; numero medido mas nao reverificavel"
-          }
-        }
-      ],
-      "nota": "Historico de configuracao, NAO uma comparacao: entre corridas variam o YAML, a calibracao de embedding e os parametros de RAG/geracao ao mesmo tempo, pelo que a diferenca nao e atribuivel a nenhum deles. METEOR foi retirado porque a media dependia de um denominador que estes artefactos ja nao permitem apurar.",
-      "tipo": "historico"
-    },
-    "referencia_tuned_n1025": {
-      "eixo": "interno",
-      "run_id": "run_20260606T121845Z",
-      "config": "configs/ptbr_fairytale_tuned.yaml",
-      "harness": {
-        "n_itens": 1025,
-        "media_rouge_l_f": 0.3491728408306999,
-        "media_bleu": 0.1745584701250178,
-        "media_f1_token": 0.3471017512776025,
-        "taxa_chunk_ouro_top_k": 1.0,
-        "taxa_juiz_sustentado_diagnostico": 0.7795121951219512,
-        "taxa_alerta": 0.0,
-        "meteor_omitido": "denominador por metrica indeterminavel neste artefacto (corrida anterior a n_por_metrica); sem wordnet o METEOR so pontua pares quase identicos, logo a media e enviesada para cima"
-      },
-      "policy": {
-        "run_id": "run_20260606T121845Z",
-        "tipo_referencia": "lexical",
-        "n_referencia_aceitavel": 532,
-        "politicas": {
-          "qualquer_critico": {
-            "n_anomalias": 46,
-            "taxa_alerta": 0.0448780487804878,
-            "taxa_falso_alarme_no_gold_correto": 0.03007518796992481,
-            "cohen_kappa_anomalia_vs_gold": 0.03183473701438915
-          },
-          "embedding_e_juiz": {
-            "n_anomalias": 0,
-            "taxa_alerta": 0.0,
-            "taxa_falso_alarme_no_gold_correto": 0.0,
-            "cohen_kappa_anomalia_vs_gold": 0.0
-          }
-        },
-        "reducao_fp_relativa": 1.0,
-        "criterio_p0_sugerido": {
-          "aplicavel": true,
-          "passou": true,
-          "fp_embedding_e_juiz": 0.0
-        }
-      },
-      "proveniencia": {
-        "run_id": "run_20260606T121845Z",
-        "artefactos_presentes": false,
-        "motivo": "outputs/run_20260606T121845Z nao esta no repositorio; numero medido mas nao reverificavel"
-      }
-    },
-    "externo_ragas_amostra": {
-      "eixo": "externo",
-      "run_id": "run_20260606T121845Z",
-      "n_amostra": 25,
-      "ragas": {
-        "disponivel": true,
-        "n": 25,
-        "scores": {
-          "faithfulness": 0.8166666666666668,
-          "answer_relevancy": 0.9357435706748114
-        },
-        "media_faithfulness": 0.8166666666666668,
-        "media_answer_relevancy": 0.9357435706748114
-      },
-      "harness_amostra": {
-        "n": 25,
-        "taxa_embedding_baixo": 0.0,
-        "taxa_juiz_sustentado": 0.72,
-        "media_f1_token": 0.4501750679377009
-      },
-      "nota": "RAGAS usa LLM externo; diagnóstico, não ground truth.",
-      "proveniencia": {
-        "run_id": "run_20260606T121845Z",
-        "artefactos_presentes": false,
-        "motivo": "outputs/run_20260606T121845Z nao esta no repositorio; numero medido mas nao reverificavel"
-      }
-    },
     "calibracao_p0": {
       "eixo": "calibracao_p0",
       "casos": [
@@ -208,97 +61,33 @@
             "aplicavel": true,
             "passou": true,
             "fp_embedding_e_juiz": 0.0
-          }
-        },
-        {
-          "label": "fairytale_lexical_tuned",
-          "run_id": "run_20260606T121845Z",
-          "tipo_referencia": "lexical",
-          "n_referencia_aceitavel": 532,
-          "politicas": {
-            "qualquer_critico": {
-              "n_anomalias": 46,
-              "taxa_alerta": 0.0448780487804878,
-              "taxa_falso_alarme_no_gold_correto": 0.03007518796992481,
-              "cohen_kappa_anomalia_vs_gold": 0.03183473701438915
-            },
-            "embedding_e_juiz": {
-              "n_anomalias": 0,
-              "taxa_alerta": 0.0,
-              "taxa_falso_alarme_no_gold_correto": 0.0,
-              "cohen_kappa_anomalia_vs_gold": 0.0
-            }
           },
-          "reducao_fp_relativa": 1.0,
-          "criterio_p0_sugerido": {
-            "aplicavel": true,
-            "passou": true,
-            "fp_embedding_e_juiz": 0.0
+          "proveniencia": {
+            "run_id": "policy_validation_run",
+            "artefactos_presentes": true,
+            "caminho": "tests/fixtures/policy_validation_run/",
+            "versionado": true
           }
         }
       ],
-      "nota": "FP = taxa_falso_alarme_no_gold_correto sob embedding_e_juiz; P0 passa se FP < 15%."
-    },
-    "hitl_amostra": {
-      "eixo": "hitl",
-      "run_id": "run_20260517T190713Z",
-      "config_path": "ptbr_fairytale_full.yaml",
-      "n_adjudicados": 6,
-      "sumario_hitl": {
-        "n_itens_rotulados": 6,
-        "n_pendentes_fila": null,
-        "taxa_aceitavel_humana": 1.0,
-        "nota": "Métricas HITL: amostra rotulada; não extrapolar ao corpus inteiro.",
-        "detector_vs_humano": {
-          "confusao": {
-            "vp": 0,
-            "fn": 0,
-            "fp": 0,
-            "vn": 6
-          },
-          "precisao": null,
-          "revocacao": null,
-          "ic95_precisao": null,
-          "ic95_revocacao": null,
-          "kappa": null
-        },
-        "embedding_vs_humano": {
-          "confusao": {
-            "vp": 0,
-            "fn": 0,
-            "fp": 0,
-            "vn": 6
-          },
-          "precisao": null,
-          "revocacao": null,
-          "ic95_precisao": null,
-          "ic95_revocacao": null,
-          "kappa": null
-        },
-        "juiz_vs_humano": {
-          "confusao": {
-            "vp": 0,
-            "fn": 0,
-            "fp": 6,
-            "vn": 0
-          },
-          "precisao": 0.0,
-          "revocacao": null,
-          "ic95_precisao": [
-            0.0,
-            0.3903430336530645
-          ],
-          "ic95_revocacao": null,
-          "kappa": 0.0
-        }
-      },
-      "nota": "Amostra humana pequena; não extrapolar ao corpus.",
       "proveniencia": {
-        "run_id": "run_20260517T190713Z",
-        "artefactos_presentes": false,
-        "motivo": "outputs/run_20260517T190713Z nao esta no repositorio; numero medido mas nao reverificavel"
+        "run_id": "policy_validation_run",
+        "artefactos_presentes": true,
+        "caminho": "tests/fixtures/policy_validation_run/",
+        "versionado": true
       },
-      "nota_degenerada": "6 itens adjudicados, todos 'correto': precisao, revocacao e kappa ficam indefinidos (avaliador constante). Abaixo do portao MIN_ROTULOS_PARA_METRICAS=10 introduzido em hitl_metrics.py; o plano C esta documentado e vazio."
+      "nota": "FP = taxa_falso_alarme_no_gold_correto sob embedding_e_juiz; P0 passa se FP < 15%."
     }
+  },
+  "removidos": {
+    "quantos": 7,
+    "motivo": "As corridas que os sustentavam (run_20260517*, run_20260518*, run_20260606T121845Z) nao existem no repositorio nem localmente, pelo que os numeros eram medidos mas irreverificaveis. Publicar um numero que ninguem pode conferir e pior do que nao o publicar: da a aparencia de evidencia sem a substancia.",
+    "o_que_saiu": [
+      "interno_fairytale_evolution (4 corridas; alem disso variava YAML, calibracao de embedding e parametros de geracao ao mesmo tempo, logo nao era uma comparacao)",
+      "referencia_tuned_n1025",
+      "externo_ragas_amostra (RAGAS sobre 25 itens)",
+      "hitl_amostra (6 rotulos, todos \"correto\": precisao, revocacao e kappa indefinidos)"
+    ],
+    "onde_esta_agora": "docs/evidencia/README.md"
   }
 }

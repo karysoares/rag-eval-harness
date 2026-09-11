@@ -1,6 +1,16 @@
 # Comparativos versionados
 
-Snapshot agregado para o README e contratos de CI. Regenerar a partir de corridas locais (`outputs/`, gitignored).
+Só entram comparativos que alguém com uma clonagem limpa consiga verificar — hoje, o
+caso de política que sai da fixture versionada `tests/fixtures/policy_validation_run/`.
+
+Sete entradas foram removidas na versão 2.0 do esquema: as corridas que as sustentavam
+(`run_20260517*`, `run_20260518*`, `run_20260606T121845Z`) já não existem, pelo que os
+números eram medidos mas irreverificáveis. O bloco `removidos` do JSON registra o que
+saiu e porquê. Os agregados com proveniência vivem agora em
+[`docs/evidencia/`](../../docs/evidencia/README.md).
+
+Cada número carrega `proveniencia.caminho` e `proveniencia.versionado`: um directório em
+`outputs/` (gitignored) serve para quem o correu, não para terceiros.
 
 ## Quatro eixos (não misturar)
 

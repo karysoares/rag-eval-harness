@@ -26,53 +26,6 @@ ASSETS = ROOT / "assets" / "benchmarks"
 FIXTURE_HITL = ROOT / "tests" / "fixtures" / "hitl_fairytale_sample"
 
 # Corridas N=1025 documentadas no README (outputs/ gitignored; métricas estáveis).
-INTERNO_EVOLUTION_CORRIDAS: list[dict[str, Any]] = [
-    {
-        "label": "baseline",
-        "run_id": "run_20260517T190713Z",
-        "config": "configs/ptbr_fairytale_full.yaml",
-        "metricas": {
-            "media_rouge_l_f": 0.380,
-            "media_bleu": 0.206,
-            "taxa_juiz_sustentado_diagnostico": 0.796,
-            "taxa_alerta": 0.0,
-        },
-    },
-    {
-        "label": "calibrado",
-        "run_id": "run_20260517T215023Z",
-        "config": "configs/ptbr_fairytale_full.yaml",
-        "metricas": {
-            "media_rouge_l_f": 0.366,
-            "media_bleu": 0.193,
-            "taxa_juiz_sustentado_diagnostico": 0.954,
-            "taxa_alerta": 0.015,
-        },
-    },
-    {
-        "label": "pos_calibracao",
-        "run_id": "run_20260518T074031Z",
-        "config": "configs/ptbr_fairytale_full.yaml",
-        "metricas": {
-            "media_rouge_l_f": 0.367,
-            "media_bleu": 0.191,
-            "taxa_juiz_sustentado_diagnostico": 0.915,
-            "taxa_alerta": 0.007,
-        },
-    },
-    {
-        "label": "tuned",
-        "run_id": "run_20260606T121845Z",
-        "config": "configs/ptbr_fairytale_tuned.yaml",
-        "metricas": {
-            "media_rouge_l_f": 0.349,
-            "media_bleu": 0.175,
-            "taxa_juiz_sustentado_diagnostico": 0.780,
-            "taxa_alerta": 0.0,
-        },
-    },
-]
-
 EIXOS_META: dict[str, dict[str, Any]] = {
     "interno": {
         "planos_kpi": ["A", "B"],
@@ -190,9 +143,15 @@ def _proveniencia(run_id: str | None) -> dict[str, Any]:
     """
     if not run_id:
         return {"run_id": None, "artefactos_presentes": False, "motivo": "sem run_id"}
-    d = ROOT / "outputs" / run_id
-    if (d / "predictions.jsonl").is_file() and (d / "summary.json").is_file():
-        return {"run_id": run_id, "artefactos_presentes": True}
+    candidatos = [ROOT / "outputs" / run_id, ROOT / "tests" / "fixtures" / run_id]
+    for d in candidatos:
+        if (d / "summary.json").is_file():
+            return {
+                "run_id": run_id,
+                "artefactos_presentes": True,
+                "caminho": str(d.relative_to(ROOT)) + "/",
+                "versionado": "tests/fixtures" in str(d),
+            }
     return {
         "run_id": run_id,
         "artefactos_presentes": False,
@@ -343,26 +302,7 @@ def main() -> None:
     args = parser.parse_args()
 
     ASSETS.mkdir(parents=True, exist_ok=True)
-    comparativos: dict[str, Any] = {
-        "interno_fairytale_evolution": {
-            "eixo": "interno",
-            "tipo": "historico",
-            "adaptador": "FairytaleQA-translated-ptBR (hub)",
-            "split": "validation",
-            "n_itens": 1025,
-            "politica_agregacao": "embedding_e_juiz",
-            "corridas": [
-                {**c, "proveniencia": _proveniencia(c.get("run_id"))}
-                for c in INTERNO_EVOLUTION_CORRIDAS
-            ],
-            "nota": (
-                "Historico de configuracao, NAO uma comparacao: entre corridas variam o YAML, "
-                "a calibracao de embedding e os parametros de RAG/geracao ao mesmo tempo, pelo "
-                "que a diferenca nao e atribuivel a nenhum deles. METEOR foi retirado porque a "
-                "media dependia de um denominador que estes artefactos ja nao permitem apurar."
-            ),
-        },
-    }
+    comparativos: dict[str, Any] = {}
 
     tuned = args.run_tuned.expanduser()
     tuned_policy: dict[str, Any] | None = None
@@ -387,13 +327,27 @@ def main() -> None:
     pol_ci = args.run_policy_ci.expanduser()
     pol_fixture = _policy_comparative(pol_ci)
     if pol_fixture:
-        calibracao_casos.append({"label": "fixture_answer_lists", **pol_fixture})
+        calibracao_casos.append(
+            {
+                "label": "fixture_answer_lists",
+                **pol_fixture,
+                "proveniencia": _proveniencia(str(pol_fixture.get("run_id") or "")),
+            }
+        )
     if tuned_policy:
-        calibracao_casos.append({"label": "fairytale_lexical_tuned", **tuned_policy})
+        calibracao_casos.append(
+            {
+                "label": "fairytale_lexical_tuned",
+                **tuned_policy,
+                "proveniencia": _proveniencia(str(tuned_policy.get("run_id") or "")),
+            }
+        )
     if calibracao_casos:
         comparativos["calibracao_p0"] = {
             "eixo": "calibracao_p0",
             "casos": calibracao_casos,
+            # Proveniência do primeiro caso: é o que um terceiro consegue reproduzir.
+            "proveniencia": _proveniencia(str(calibracao_casos[0].get("run_id") or "")),
             "nota": (
                 "FP = taxa_falso_alarme_no_gold_correto sob embedding_e_juiz; P0 passa se FP < 15%."
             ),
@@ -409,8 +363,17 @@ def main() -> None:
         }
         _write_hitl_fixture(hitl_run)
 
+    # O registo do que foi removido é histórico e não se recalcula: preserva-se.
+    anterior: dict[str, Any] = {}
+    dest_previa = ASSETS / "comparatives.json"
+    if dest_previa.is_file():
+        try:
+            anterior = json.loads(dest_previa.read_text(encoding="utf-8"))
+        except json.JSONDecodeError:
+            anterior = {}
+
     out: dict[str, Any] = {
-        "schema_version": "1.2",
+        "schema_version": "2.0",
         "gerado_em_utc": datetime.now(tz=UTC).isoformat(),
         "nota": (
             "Comparativos versionados; regenerar com scripts/export_comparatives.py. "
@@ -420,6 +383,8 @@ def main() -> None:
         "eixos": EIXOS_META,
         "comparativos": comparativos,
     }
+    if isinstance(anterior.get("removidos"), dict):
+        out["removidos"] = anterior["removidos"]
 
     dest = ASSETS / "comparatives.json"
     dest.write_text(json.dumps(out, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")

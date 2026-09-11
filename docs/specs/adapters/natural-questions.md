@@ -1,6 +1,10 @@
 # SPEC-A-NQ: Adaptador Natural Questions
 
-- **Estado:** implemented (dois protocolos YAML)
+- **Estado:** **histórico** — o protocolo foi validado, mas nada nesta spec é
+  distribuído. Não existe adaptador dedicado (o genérico `adapters/hf_generic.py`
+  cobre o caso por mapeamento de colunas no YAML), nem os configs `nq_open*.yaml`,
+  nem o teste que a spec citava. Fica como registo do protocolo com que o
+  adaptador genérico foi exercitado, não como capacidade entregue.
 - **Testes:** `tests/test_eval_items_load.py` (o adaptador dedicado foi substituído
   pelo genérico `adapters/hf_generic.py`; `tests/test_adapters_natural_questions.py`
   não é distribuído, pela mesma razão que os configs `nq_open*.yaml`)

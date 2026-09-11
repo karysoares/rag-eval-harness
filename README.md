@@ -20,21 +20,28 @@ Retrieval, generation, grounding, LLM-as-judge with calibration and bias probes,
 
 Most RAG evaluation tools score the answer. This one also scores **the thing doing the scoring** — because an LLM judge is an instrument, and an instrument that nobody characterised produces numbers nobody should act on.
 
-Four judges over the same 200 items, measured with the harness itself. κ and ECE carry bootstrap intervals, because they are the columns a judge choice would be argued on:
+Judges measured with the harness itself, over the FairytaleQA pt-BR reference case. Only arms where **the judge differs from the generator** are compared — a model grading its own output is not a judge comparison, and neither is an arm that changed two variables. κ and ECE carry bootstrap intervals, because they are the columns a judge choice would be argued on:
 
-| judge | accuracy | κ (95% CI) | ECE (95% CI) | mean confidence | s/item |
-|---|---|---|---|---|---|
-| `gpt-4o` | 0.561 | −0.028 [−0.081, +0.020] | 0.421 [0.351, 0.493] | 0.982 | 11.7 |
-| `gpt-4o-mini` ‡ | 0.575 | −0.006 [−0.046, +0.032] | 0.399 [0.332, 0.465] | 0.974 | 3.0 |
-| `gpt-5.4-nano` | **0.610** | 0.092 [+0.004, +0.183] | **0.296** [0.234, 0.360] | 0.906 | **2.5** |
-| `qwen2.5` (local, free) † | 0.585 | 0.190 [+0.074, +0.308] | 0.366 [0.298, 0.434] | 0.911 | 33.7 |
+| judge | generator | n | accuracy | κ (95% CI) | ECE (95% CI) | mean conf. | s/item |
+|---|---|---|---|---|---|---|---|
+| `gpt-4o` | `gpt-4o-mini` | 189 | 0.545 | −0.006 [−0.054, +0.043] | 0.437 [0.370, 0.510] | 0.982 | 11.7 |
+| `gpt-5.4-nano` | `gpt-4o-mini` | 200 | **0.595** | 0.084 [−0.000, +0.172] | **0.311** [0.248, 0.374] | 0.906 | **2.5** |
+| `qwen2.5` (local, free) | `gpt-4o-mini` | 93 ‡ | 0.667 | 0.292 [+0.084, +0.469] | 0.276 [0.187, 0.378] | 0.921 | ~24 |
 
-Three things the intervals say that the point estimates hid. Two of the four judges have a κ interval containing zero — on this reference they do not agree with it beyond chance at all. The remaining two overlap each other, so **no judge here is demonstrably more discriminative than another** at N=200. And every judge declares 0.91–0.98 confidence while being right 56–61% of the time, so none supports confidence-based triage. The most expensive is last on accuracy, calibration and speed.
+Three findings, and the intervals are what make them sayable. **Neither full-N arm agrees with the reference beyond chance** — both κ intervals contain zero, so on 200 items these judges and the lexical reference are independent signals rather than one validating the other. **Every judge is overconfident**: 0.91–0.98 declared confidence against 0.55–0.67 accuracy, so `confianca` cannot drive triage. And **the expensive model is the worst one** on accuracy, calibration and latency at once — `gpt-4o` is last on all three and 9.3× the price of `gpt-4o-mini`.
 
-That is the point of the exercise: the ranking a naive table would invite is not supported, and it takes an interval to see it. [How it is measured](#judge-meta-evaluation).
+‡ The local arm is a **partial** run: the API credits ran out at item 94, so it covers 93 of 200 as a prefix of the dataset order rather than a random sample — in FairytaleQA, where items group by story, a prefix covers fewer distinct stories. It is the only arm whose κ interval excludes zero, which is suggestive and not established. [`docs/evidencia/judge_local_gerador_partilhado_93.json`](docs/evidencia/judge_local_gerador_partilhado_93.json).
 
-† The local arm ran a local generator (`llama3.2`) as well as a local judge, so this row varies judge and generator together. A partial re-run with the shared `gpt-4o-mini` generator ([`docs/evidencia/judge_local_gerador_partilhado_93.json`](docs/evidencia/judge_local_gerador_partilhado_93.json), 93 of 200 items — the API credits ran out at item 94) shows both things at once: the generator did account for much of the gap (mean F1 on the same items rises from 0.282 to 0.357), *and* the local judge keeps the highest κ once the generator is controlled (0.244, the only arm whose interval excludes zero on that subset). It is not settled — the intervals still overlap `gpt-5.4-nano`'s, and the 93 items are a prefix of the dataset order rather than a random sample, which in FairytaleQA means fewer distinct stories. The table above stays as the three-API-arm comparison over the full 200.
-‡ Self-evaluation: here the judge is the model that produced the answer (`protocolo_ativo.models.judge_same_as_generator`). A model grading its own output tends to prefer it, so this row is not cleanly comparable with the others either.
+All values are re-derived through the current Portuguese lexical normalisation (`llm-eval --rescore-lexical`), which is why they differ from earlier published figures — the accuracy and κ depend on the lexical reference, and the previous tokenizer split every accented word. [How it is measured](#judge-meta-evaluation).
+
+### Two arms that do not support a judge comparison
+
+Both were run, both are recorded, and neither is in the table above. Naming them is the point: what invalidates a comparison is part of the result.
+
+| arm | why it is excluded |
+|---|---|
+| `gpt-4o-mini` judging `gpt-4o-mini` | **Self-evaluation.** The judge is the model that produced the answer (`protocolo_ativo.models.judge_same_as_generator`), and a model grading its own output tends to prefer it. Its 0.780 approval rate is not comparable with an arm judged by a different family. |
+| `qwen2.5` judging `llama3.2` | **Two variables at once.** It varied judge *and* generator, so its κ of 0.229 was equally consistent with a weaker generator producing weaker answers. The partial re-run above separates them: mean F1 on the same items rises from 0.282 to 0.357 once the generator is shared, so the generator did account for much of the gap. |
 
 Underneath is a **corpus-agnostic** harness: every dataset is an adapter, and the core measures retrieval, generation and verification as independent layers. The bundled reference case is **FairytaleQA pt-BR** ([`benjleite/FairytaleQA-translated-ptBR`](https://huggingface.co/datasets/benjleite/FairytaleQA-translated-ptBR)).
 
@@ -214,20 +221,21 @@ uv run llm-eval --judge-report outputs/run_<id>
 
 Presets for Ollama, vLLM, DeepSeek, DashScope and OpenRouter are in [`.env.example`](.env.example).
 
-**Choose a judge with the harness, not with intuition.** Four judges over the same 200 items (`configs/ptbr_fairytale_judge_ab.yaml`, paired by `id_item`). The three API arms share the `gpt-4o-mini` generator; the local arm generated with `llama3.2` on the same local endpoint, which confounds judge with generator in that row:
+**Choose a judge with the harness, not with intuition.** Five arms over the same 200 items (`configs/ptbr_fairytale_judge_ab.yaml`, paired by `id_item`), of which three are valid judge comparisons. All values re-derived through the current lexical normalisation.
 
-| judge | n | accuracy | κ (95% CI) | ECE (95% CI) | mean conf. | `sustentado` | s/item |
-|---|---|---|---|---|---|---|---|
-| `gpt-4o` | 189 | 0.561 | −0.028 [−0.081, +0.020] | 0.421 [0.351, 0.493] | 0.982 | 86.2% | 11.7 |
-| `gpt-4o-mini` ‡ | 200 | 0.575 | −0.006 [−0.046, +0.032] | 0.399 [0.332, 0.465] | 0.974 | 78.0% | 3.0 |
-| **`gpt-5.4-nano`** | 200 | **0.610** | 0.092 [+0.004, +0.183] | **0.296** [0.234, 0.360] | 0.906 | 76.5% | **2.5** |
-| `qwen2.5` (Ollama) † | 200 | 0.585 | 0.190 [+0.074, +0.308] | 0.366 [0.298, 0.434] | 0.911 | 59.5% | 33.7 |
+| judge | generator | n | accuracy | κ (95% CI) | ECE (95% CI) | mean conf. | `sustentado` | s/item | valid? |
+|---|---|---|---|---|---|---|---|---|---|
+| `gpt-4o` | `gpt-4o-mini` | 189 | 0.545 | −0.006 [−0.054, +0.043] | 0.437 [0.370, 0.510] | 0.982 | 86.2% | 11.7 | yes |
+| `gpt-5.4-nano` | `gpt-4o-mini` | 200 | **0.595** | 0.084 [−0.000, +0.172] | **0.311** [0.248, 0.374] | 0.906 | 76.5% | **2.5** | yes |
+| `qwen2.5` (Ollama) | `gpt-4o-mini` | 93 | 0.667 | 0.292 [+0.084, +0.469] | 0.276 [0.187, 0.378] | 0.921 | 62.4% | ~24 | partial |
+| `gpt-4o-mini` | `gpt-4o-mini` | 200 | 0.545 | −0.008 [−0.049, +0.028] | 0.428 [0.361, 0.493] | 0.974 | 78.0% | 3.0 | **no** — self-evaluation |
+| `qwen2.5` (Ollama) | `llama3.2` | 200 | 0.610 | 0.229 [+0.111, +0.348] | 0.342 [0.275, 0.406] | 0.911 | 59.5% | 33.7 | **no** — judge and generator both varied |
 
-Intervals are bootstrap over items (`bootstrap_kappa_ci`, `bootstrap_ece_ci`). They change how the table reads: `gpt-4o` and `gpt-4o-mini` have κ intervals spanning zero, and the two positive κ intervals overlap, so the apparent ordering by κ is not supported at this N. Only the ECE gap between `gpt-5.4-nano` and `gpt-4o` is close to resolvable.
+Intervals are bootstrap over items (`bootstrap_kappa_ci`, `bootstrap_ece_ci`). Both full-N valid arms have a κ interval spanning zero: the apparent ordering by κ is not supported at this N, and only the partial local arm excludes zero. No pair differs significantly on alert rate (all p=1 after excluding execution failures, Holm-adjusted across the simultaneous comparisons — arms form a family, not independent tests). Read the columns separately: accuracy and κ are measured against a *lexical* reference, which asks a different question than the judge does, so κ near zero means the two signals are independent rather than that the judge is wrong. Calibration is the unambiguous column — every judge declares 0.91–0.98 confidence while being right 55–67% of the time, so `confianca` is not usable as a triage threshold.
 
-No pair differs significantly on alert rate (all p=1 after excluding execution failures, and Holm-adjusted across the six simultaneous comparisons — four arms produce a family, not six independent tests). Read the columns separately: accuracy and κ are measured against a *lexical* reference, which asks a different question than the judge does, so κ near zero means the two signals are independent rather than that the judge is wrong. Calibration is unambiguous — every judge declares 0.91–0.98 confidence while being right 56–61% of the time, so `confianca` is not usable as a triage threshold.
+The costly model is not the good one: `gpt-4o` is last on accuracy, calibration and latency, at 9.3× the price of `gpt-4o-mini`, and that comparison is clean — it shares the generator and comes from a different family than it.
 
-The costly model is not the good one: `gpt-4o` is last on every column and 9.3× the price of `gpt-4o-mini`. ‡ That comparison is *almost* clean — both arms share the generator, but in the `gpt-4o-mini` arm the judge **is** the generator, so it is a self-evaluation and a model grading its own output tends to prefer it. † The local arm changed two variables at once (judge **and** generator). A partial re-run with the shared generator (93 of 200 items, credits exhausted) separates them: the generator accounted for much of the gap, and the local judge still had the highest κ afterwards. Suggestive, not settled — see the footnote in the Overview and [`docs/evidencia/judge_local_gerador_partilhado_93.json`](docs/evidencia/judge_local_gerador_partilhado_93.json).
+The two invalid arms are kept in the table on purpose, marked. Dropping them would hide what was actually run; presenting them unmarked would be the error. See the Overview for why each is excluded.
 
 Full aggregates, including per-model token usage and the paired tests: [`docs/evidencia/judge_ab_fairytale_200.json`](docs/evidencia/judge_ab_fairytale_200.json).
 

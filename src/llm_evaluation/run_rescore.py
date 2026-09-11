@@ -22,6 +22,7 @@ from typing import Any
 
 from llm_evaluation.config import LexicalMetricsConfig
 from llm_evaluation.evaluation_metrics import load_records_from_predictions_jsonl
+from llm_evaluation.judge_meta import build_judge_meta_report
 from llm_evaluation.lexical_metrics import compute_lexical_scores
 from llm_evaluation.protocol import protocolo_sha256
 from llm_evaluation.reporting import record_to_json, summarize
@@ -142,7 +143,7 @@ def rescore_run_dir(
     summary = summarize(registos, reference_type=ref_type, protocol=protocolo)
     bruto = summary.get("sumario_lexical")
     novo: dict[str, Any] = bruto if isinstance(bruto, dict) else {}
-    summary["reanalise"] = {
+    reanalise: dict[str, Any] = {
         "tipo": "rescore_lexical",
         "sem_chamadas_api": True,
         "idioma_normalizacao": cfg_lex.idioma,
@@ -162,8 +163,34 @@ def rescore_run_dir(
             "e o kappa do juiz derivados desta referencia mudam com ela."
         ),
     }
+    summary["reanalise"] = reanalise
     if protocolo is not None:
         summary["protocolo_ativo"] = protocolo
+
+    # A exactidão e o κ do juiz derivam de `referencia_incorreta`, que depende do
+    # F1 léxico: re-pontuar as métricas sem re-derivar a meta-avaliação deixava o
+    # relatório publicado a discordar do artefacto re-pontuado nos mesmos itens.
+    relatorio = build_judge_meta_report(registos, reference_type=ref_type, protocol=protocolo)
+    relatorio["reanalise"] = {
+        "tipo": "rescore_lexical",
+        "sem_chamadas_api": True,
+        "nota": (
+            "Meta-avaliacao re-derivada das metricas lexicas re-pontuadas. Compare com "
+            "judge_report.json para ver o efeito da normalizacao portuguesa na referencia."
+        ),
+    }
+    (run_dir / "judge_report.rescored.json").write_text(
+        json.dumps(relatorio, indent=2, ensure_ascii=False) + "\n", encoding="utf-8"
+    )
+    conc = relatorio.get("concordancia_com_referencia") or {}
+    cal = relatorio.get("calibracao") or {}
+    reanalise["meta_avaliacao_rederivada"] = {
+        "exatidao": conc.get("exatidao"),
+        "cohen_kappa": conc.get("cohen_kappa"),
+        "cohen_kappa_ic95_bootstrap": conc.get("cohen_kappa_ic95_bootstrap"),
+        "ece": cal.get("ece"),
+        "ece_ic95_bootstrap": cal.get("ece_ic95_bootstrap"),
+    }
 
     destino_pred = run_dir / "predictions.rescored.jsonl"
     with destino_pred.open("w", encoding="utf-8") as fh:
