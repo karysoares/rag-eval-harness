@@ -1,0 +1,17 @@
+# Configuração do gitleaks. Estende as regras por omissão; não as substitui.
+[extend]
+useDefault = true
+
+# O teste que prova que a redacção de credenciais funciona **tem** de conter strings
+# com forma de segredo — é o seu input. O gitleaks marcava três delas como
+# `generic-api-key` e fazia o job falhar em cada push, o que é pior do que inútil: um
+# gate que está sempre vermelho deixa de ser lido, e a próxima fuga real passa com ele.
+#
+# Os valores são inventados (`abc123def456ghi789`, `AIzaSyD-1234567890abcdef`,
+# `zzz999888777666555`) e nunca corresponderam a nada. O alcance é deliberadamente
+# estreito: um único ficheiro, pelo caminho. A mesma regra que o `SECURITY.md` impõe à
+# lista de exclusões do pip-audit aplica-se aqui — isto não é sítio para calar ruído.
+[[rules]]
+id = "generic-api-key"
+[rules.allowlist]
+paths = ['''^tests/test_secret_redaction\.py$''']

@@ -27,3 +27,8 @@ receive a response within 7 days.
 - The `pip-audit` allowlist is not a place to silence noise. Each entry states why the
   advisory does not apply or why the fix is out of reach, and leaves when that stops
   being true. Widening it without that reasoning defeats the gate.
+- The same applies to `.gitleaks.toml`. Its single allowlist entry covers
+  `tests/test_secret_redaction.py`, whose *inputs* are secret-shaped strings by
+  necessity — that test exists to prove redaction works. The values are invented and
+  never matched anything, and the scope is one file matched by path. A gate that is
+  permanently red stops being read, and the next real leak passes with it.
