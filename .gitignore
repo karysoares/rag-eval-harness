@@ -67,3 +67,8 @@ notebooks/
 # Cursor IDE (local only)
 .cursor/
 .idea/
+
+# Ferramentas locais do agente (prompt de auditoria, skill de revisão). Úteis, mas
+# publicá-las é uma decisão de âmbito separada da do harness: ficam locais até alguém
+# a tomar de propósito.
+.claude/
