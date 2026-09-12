@@ -1,0 +1,86 @@
+{
+ "schema_version": "1",
+ "gerado_em_utc": "2026-09-12T10:54:23.052144+00:00",
+ "titulo": "Rubrica rag_pt vs generic_pt sobre as mesmas respostas — ablação de uma variável",
+ "porque_existe": "O estilo generic_pt foi acrescentado para fechar a escolha forcada entre lingua e neutralidade de dominio. Um prompt de juiz sem corrida que o caracterize e um botao de configuracao sem evidencia, o que a PREMISSAS.md desaconselha. Isto mede-o.",
+ "desenho": {
+  "variavel_unica": "par de ficheiros de prompt do juiz",
+  "modelo_juiz": "qwen2.5:latest",
+  "gerador_das_respostas": "gpt-4o-mini",
+  "corpus": "FairytaleQA pt-BR (validation)",
+  "n_itens": 25,
+  "max_context_chars": 12000,
+  "referencia": "lexical (F1 token), limiar f1_fraca_min=0.25",
+  "run_id": "run_20260910T142255Z",
+  "nota": "Braço de referencia sai dos vereditos gravados; so a rubrica nova fez chamadas. Itens sem juiz, com erro de execucao, ou em fallback estao fora."
+ },
+ "bracos": {
+  "rag_pt": {
+   "n_com_referencia": 25,
+   "exatidao_vs_referencia_lexical": 0.8,
+   "n_acertos": 20,
+   "taxa_aprovacao": 0.64,
+   "n_itens_que_disparam_anomalia": 8
+  },
+  "generic_pt": {
+   "n_com_referencia": 25,
+   "exatidao_vs_referencia_lexical": 0.6,
+   "n_acertos": 15,
+   "taxa_aprovacao": 0.28,
+   "n_itens_que_disparam_anomalia": 6
+  }
+ },
+ "concordancia_entre_rubricas": {
+  "exata": {
+   "n_concordes": 12,
+   "taxa": 0.48,
+   "ic95_wilson": [
+    0.30031003928960015,
+    0.6650178204685269
+   ]
+  },
+  "aprovacao": {
+   "vereditos_que_aprovam": [
+    "sustentado"
+   ],
+   "confusao": {
+    "ambos_aprovam": 7,
+    "so_ref": 9,
+    "so_novo": 0,
+    "ambos_reprovam": 9
+   },
+   "cohen_kappa": 0.358974358974359,
+   "mcnemar": {
+    "metodo": "mcnemar_exato_binomial",
+    "n_discordantes": 9,
+    "b": 9,
+    "c": 0,
+    "p_valor": 0.00390625
+   }
+  }
+ },
+ "transicoes": {
+  "sustentado -> incompleto": 7,
+  "sustentado -> sustentado": 7,
+  "nao_sustentado -> incompleto": 4,
+  "nao_sustentado -> nao_sustentado": 4,
+  "sustentado -> nao_sustentado": 2,
+  "incompleto -> incompleto": 1
+ },
+ "o_que_isto_estabelece": [
+  "Neste corpus o generic_pt e estritamente mais estrito: 9 pares discordantes, todos na mesma direcao (b=9, c=0, McNemar exato p=0,0039). Nenhum item passou de reprovado a aprovado.",
+  "E mais estrito e MENOS exato: 15/25 contra 20/25 do rag_pt face a referencia lexical. Ser mais exigente nao foi ser melhor.",
+  "O endurecimento concentra a massa em `incompleto`: 11 dos 25 itens acabam ai, contra 1 no rag_pt. Como `incompleto` nao esta em judge_aggregation_verdicts, a rubrica mais estrita produz um detector MAIS permissivo — 6 itens disparam anomalia contra 8. Um efeito de segunda ordem que a taxa de aprovacao sozinha esconderia."
+ ],
+ "o_que_isto_NAO_estabelece": [
+  "Nao refuta o proposito do estilo. O generic_pt existe para corpora portugueses que NAO sao narrativa, e foi medido sobre narrativa — o terreno onde o rag_pt, que nomeia contos, deve ganhar. O caso de uso reclamado continua sem corpus para o testar.",
+  "N=25: a magnitude nao e estimavel com precisao. A direcao e solida porque o McNemar corre sobre os 9 pares discordantes e todos apontam para o mesmo lado.",
+  "A referencia e F1 lexico, nao humana. Uma rubrica que exija suporte literal e penalizada por uma referencia que premeia sobreposicao de tokens; sem adjudicacao humana nao se separa \"rubrica exigente demais\" de \"referencia permissiva demais\"."
+ ],
+ "consequencia_pratica": "Nao usar generic_pt em corpora narrativos: o rag_pt e melhor aqui, medido. Para qualquer troca de rubrica, verificar tambem o efeito em judge_aggregation_verdicts — mover massa para `incompleto` baixa a taxa de alerta sem que ninguem o tenha decidido.",
+ "limitacoes": [
+  "N=25 de 93 itens elegiveis (limite de tempo do juiz local, ~25 s/item).",
+  "Um so modelo de juiz (qwen2.5:latest). Um modelo com melhor cobertura de portugues pode reagir de outra forma ao mesmo endurecimento.",
+  "Sem repeticao: a auto-consistencia do juiz nao foi medida, logo parte da discordancia pode ser ruido do proprio juiz e nao efeito da rubrica."
+ ]
+}

@@ -17,6 +17,7 @@ mais depressa do que um teste vermelho.
 | Artefactos publicados que ninguém lê | 2 | 2 | 0 |
 | Documentação a afirmar capacidade não entregue | 1 | 1 | 0 |
 | Planos métricos declarados e vazios | 2 | 0 | **2** |
+| Estilos de prompt entregues sem caracterização | 1 | 1 | 0 |
 | Cobertura empírica abaixo do que a tese exige | 1 | 0 | **1** |
 
 ## Fechados
@@ -92,6 +93,15 @@ todos `correto`, o que torna κ indefinido (avaliador constante) e fica abaixo d
 léxico**, nunca com um humano. O κ perto de zero significa sinais independentes, não juiz
 incompetente — mas sem adjudicação humana não há como decidir qual dos dois sinais está
 mais perto da verdade. Amostra de 24 itens exportada e pronta a rotular.
+
+### A-bis. `generic_pt` está caracterizado, e a medição foi contra ele
+Fechado desde a versão inicial deste documento, e vale a pena o registo porque o resultado
+contraria o trabalho que o produziu: sobre 25 itens do FairytaleQA, o `generic_pt` é
+estritamente mais estrito (McNemar p=0,0039, nove pares discordantes todos no mesmo sentido)
+e **menos exato** que o `rag_pt` — 15/25 contra 20/25. O endurecimento concentra 11 itens em
+`incompleto`, que não dispara anomalia, pelo que a rubrica mais estrita dá um detector mais
+permissivo. Publicado com a recomendação de **não** o usar em narrativa. O caso de uso para
+que foi feito — português não narrativo — continua sem corpus que o teste.
 
 ### B. Auto-consistência do juiz nunca foi medida
 `scripts/judge_self_consistency.py` existe e nunca correu. Sem ela, o piso de ruído do

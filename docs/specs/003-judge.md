@@ -78,6 +78,31 @@ teste: traduzi-los partiria um rótulo em dois na agregação.
 Estilo par para o gerador: `generation.estilo_prompt: generic_pt`
 (`responder_generic_pt_*`), com as mesmas propriedades e a mesma tabela de casos-limite.
 
+**Caracterizado, e o resultado é desfavorável em narrativa.** Ablação de uma variável
+(mesmo juiz `qwen2.5:latest`, mesmas respostas, mesmo tecto de contexto; só o par de
+ficheiros muda) sobre 25 itens do FairytaleQA —
+[`evidencia/rubrica_rag_pt_vs_generic_pt_25.json`](../evidencia/rubrica_rag_pt_vs_generic_pt_25.json):
+
+| rubrica | exatidão vs referência léxica | taxa de aprovação | itens que disparam anomalia |
+|---|---|---|---|
+| `rag_pt` | **20/25 (0,800)** | 0,64 | 8 |
+| `generic_pt` | 15/25 (0,600) | 0,28 | 6 |
+
+Nove pares discordantes, **todos na mesma direcção** (b=9, c=0; McNemar exato p=0,0039):
+nenhum item passou de reprovado a aprovado. O endurecimento tornou o juiz mais exigente e
+menos exato — ser mais estrito não foi ser melhor.
+
+O efeito de segunda ordem importa mais do que o primeiro: 11 dos 25 itens acabam em
+`incompleto`, que não está em `judge_aggregation_verdicts`. Uma rubrica mais estrita produz
+portanto um detector **mais permissivo**, e a taxa de aprovação sozinha esconderia isso. Ao
+trocar de rubrica, verificar sempre o efeito na agregação e não só nos vereditos.
+
+Isto não refuta o propósito do estilo: o `generic_pt` existe para corpora portugueses que
+**não** são narrativa, e foi medido sobre narrativa — o terreno onde o `rag_pt`, que nomeia
+contos, deve ganhar. O caso de uso reclamado continua sem corpus que o teste. A recomendação
+operacional é: `rag_pt` em narrativa; `generic_pt` só fora dela, e caracterizando-o nesse
+corpus antes de confiar nos números.
+
 Contratos garantidos por `tests/test_prompt_generic_pt.py` (37 testes): ausência de termos
 de domínio, ortografia consistente fora das linhas que ensinam pares, fronteira
 anti-injection, precedência, âncoras de confiança, enum completo, taxonomia partilhada, e
